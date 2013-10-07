@@ -91,7 +91,7 @@ a { color: black; }
     </div>
   </div>
   <div class="col-md-8" id="build-contents">
-    <h1><span id="build-title"><i class="icon-ok-sign status success"></i> <a href="/" target="_window">test/test</a></span> <a id="build-download" class="pull-right btn btn-success btn-lg" href="pdf">Download PDF</a></h1>
+    <h1><span id="build-title"><i class="icon-ok-sign status success"></i> <a href="/" target="_window">test/test</a></span> <a id="build-download" class="pull-right btn btn-success btn-lg" href="pdf"><i class="icon-cloud-download"></i> Download PDF</a></h1>
 
     <ul class="nav nav-tabs">
       <li class="active"><a href="#">Current</a></li>
@@ -176,9 +176,11 @@ var renderRepo = function(repoUser, repoName, data) {
 
   $download = $('#build-download');
   if ('COMPLETED' == data.status) {
-    $download.removeClass('hidden');
+    $download.removeClass('disabled btn-default');
+    $download.addClass('btn-success');
   } else {
-    $download.addClass('hidden');
+    $download.removeClass('btn-success');
+    $download.addClass('disabled btn-default');
   }
 
   $title = $('#build-title');
