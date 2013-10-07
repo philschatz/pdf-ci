@@ -17,8 +17,26 @@ And, to start it up (all one line)
 
     node bin/server.js --pdfgen ${PATH_TO_PDFGEN_BINARY}
 
-Then, point your browser to the website at http://localhost:3001/
+Then, point your browser to the website at [http://localhost:3001/]()
 
-## "Ok, so what now?"
+## Ok, so what now?
 
-Submit a job by going to http://localhost:3001/philschatz/minimal-book/ and clicking the "Rebuild" button.
+Submit a job by going to [http://localhost:3001/philschatz/minimal-book/]() and clicking the "Rebuild" button.
+
+## Cool! How can I help out? (TODO list)
+
+- `[X]` Trigger from a GET/POST
+- `[X]` Concatenate all the HTML files
+- `[X]` Generate a PDF
+- `[X]` GET the PDF via a URL
+- `[X]` Store multiple promises in memory
+- `[X]` Store console output and progress
+- `[X]` Show status webpage
+- `[X]` read EPUB files (META-INF/container.xml, OPF file, ToC HTML)
+- `[X]` run `git clone` or `git pull` from command line
+- `[ ]` write `POST` route for GitHub Service Hooks
+- `[ ]` distinguish commit from branch or other hooks
+- `[ ]` add a Status Image to include in GitHub README
+- `[ ]` store PDFs on file system
+- `[ ]` store tasks in SQL(lite?) database
+- `[ ]` create slave task
