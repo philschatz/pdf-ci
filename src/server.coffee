@@ -237,7 +237,7 @@ module.exports = exports = (argv) ->
 
     readUri = (uri) ->
       filePath = decodeURIComponent(uri.absoluteTo(root).toString())
-      task.notify {msg:'Reading file', uri:filePath}
+      task.notify {msg:'Reading file', path:uri.toString()}
       fsReadFile(filePath)
 
 
