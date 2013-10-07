@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Build Status</title>
+    <meta content='text/html; charset=UTF-8' http-equiv='Content-Type'>
+    <meta content='width=device-width, height=device-height, initial-scale=1.0, user-scalable=no' name='viewport'>
+
+    <script type='text/javascript' src='/bower_components/jquery/jquery.js'></script>
+    <script type='text/javascript' src='/bower_components/underscore/underscore.js'></script>
+    <script type='text/javascript' src='/bower_components/backbone/backbone.js'></script>
+    <script type='text/javascript' src='/bower_components/moment/moment.js'></script>
+    <script type='text/javascript' src='/bower_components/bootstrap/js/tooltip.js'></script>
+    <script type='text/javascript' src='/bower_components/bootstrap/js/dropdown.js'></script>
+
+    <link rel="stylesheet/less" type="text/css" href="/bower_components/bootstrap/less/bootstrap.less" />
+    <script type='text/javascript' src="/bower_components/less/dist/less-1.4.2.js"></script>
+
+
+    <link rel="stylesheet" href="/bower_components/font-awesome/build/assets/font-awesome/css/font-awesome.css" />
+
+    <style type="text/css">
+
+a { color: black; }
+
+.status.active  { color: #999; }
+.status.success { color: #0f0; }
+.status.danger  { color: #900; }
+
+#build-log {
+  counter-reset: line-number 0;
+
+  color: white;
+  background-color: black;
+  padding: 1em;
+  font-family: monospace;
+}
+
+#build-log > .line::before {
+  content: counter(line-number);
+  counter-increment: line-number;
+
+  color: #666;
+  display: inline-block;
+  padding-right: 1em;
+  min-width: 3em;
+}
+
+    </style>
+
+
+  </head>
+  <body>
+
+
+<nav id="top" class="navbar navbar-inverse" role="navigation">
+  <!-- Brand and toggle get grouped for better mobile display -->
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+      <span class="sr-only">Toggle navigation</span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <a class="navbar-brand" href="#">Continuous PDF Generator</a>
+  </div>
+
+  <!-- Collect the nav links, forms, and other content for toggling -->
+  <div class="collapse navbar-collapse navbar-ex1-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="#">How it Works</a></li>
+      <li><a href="#">Add Me!</a></li>
+    </ul>
+    <ul class="nav navbar-nav navbar-right">
+      <li><a href="https://github.com/philschatz/pdf-ci" target="_window">Fork this on GitHub!</a></li>
+    </ul>
+  </div><!-- /.navbar-collapse -->
+</nav>
+
+
+<div class="row">
+  <div class="col-md-2" id="sidebar">
+    <div class="panel panel-info">
+      <div class="panel-heading">
+        <h3 class="panel-title">Recent Builds</h3>
+      </div>
+      <table class="table table-hover">
+        <tbody id="recent-builds">
+          <tr><td><i class="icon-spinner icon-spin"></i> Loading?</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-md-8" id="build-contents">
+    <h1><span id="build-title"><i class="icon-ok-sign status success"></i> <a href="/" target="_window">test/test</a></span> <a id="build-download" class="pull-right btn btn-success btn-lg" href="pdf">Download PDF</a></h1>
+
+    <ul class="nav nav-tabs">
+      <li class="active"><a href="#">Current</a></li>
+      <li class="disabled"><a href="#">Build History</a></li>
+    </ul>
+
+    <div class="panel">
+
+      <h3>Build Info</h3>
+
+      <div class="row">
+        <div class="col-md-1 field-label">Status:</div>
+        <div class="col-md-9 field-value" id="build-status">Success</div>
+        <div class="col-md-1"><button id="build-resubmit" class="btn btn-default" href="submit">Resubmit Task</button></div>
+      </div>
+      <div class="row">
+        <div class="col-md-1 field-label">Updated:</div>
+        <div class="col-md-2 field-value" id="build-completed"><time datetime="">?? hours ago</time></div>
+      </div>
+      <div class="row">
+        <div class="col-md-1 field-label">Duration:</div>
+        <div class="col-md-2 field-value" id="build-duration">?? min</div>
+      </div>
+    </div>
+
+    <div id="build-log">
+      <div><i class="icon-spinner icon-spin"></i> Loading?</div>
+    </div>
+
+  </div>
+</div>
+
+    <script type="text/javascript">
+//<!--
+
+ICON_STATUS_CLASSES = {
+  'UNKNOWN':    'icon-question-sign status unknown',
+  'COMPLETED':  'icon-ok-sign status success',
+  'PENDING':    'icon-spinner icon-spin status active',
+  'FAILED':     'icon-remove-sign status danger'
+};
+
+RECENT_ROW_STATUS_CLASSES = {
+  'COMPLETED':  '',
+  'PENDING':    'active',
+  'FAILED':     'danger'
+};
+
+
+// Populate the recent builds
+REPO_LINK_TEMPLATE = '<span><i></i> <button class="btn-link"></button></span>';
+RECENT_BUILD_TEMPLATE = '<tr><td></td></tr>';
+LOG_LINE_TEMPLATE = '<div class="line"></div>';
+
+var CONTENT_TIMEOUT = null;
+
+var renderRepo = function(repoUser, repoName, data) {
+  $log = $('#build-log');
+  if (repoUser + '/' + repoName == $log.data('repo')) {
+    offset = $log.children().length;
+    data.history.splice(0, offset);
+  } else {
+    $log.empty();
+  }
+  $log.data('repo', repoUser + '/' + repoName);
+
+  _.each(data.history, function(entry) {
+    if (entry.msg) {
+      text = entry.msg;
+      delete entry.msg;
+      text += ' ' + JSON.stringify(entry);
+    } else {
+      text = entry;
+    }
+    $line = $(LOG_LINE_TEMPLATE);
+    $line.text(text);
+    $('#build-log').append($line);
+  });
+
+
+  $('#build-status').text(data.status);
+
+  $download = $('#build-download');
+  if ('COMPLETED' == data.status) {
+    $download.removeClass('hidden');
+  } else {
+    $download.addClass('hidden');
+  }
+
+  $title = $('#build-title');
+  $title.children('i').attr('class', ICON_STATUS_CLASSES[data.status]);
+  $title.children('a')
+  .attr('href', 'https://github.com/' + repoUser + '/' + repoName)
+  .text(repoUser + '/' + repoName);
+
+  // Enable the resubmit button if the task COMPLETED or FAILED
+  $resubmit = $('#build-resubmit');
+  $resubmit.toggleClass('hidden', data.status == 'PENDING');
+  $resubmit.off('click');
+  $resubmit.on('click', function() {
+    $resubmit.addClass('disabled');
+    $log.data('repo', '').empty();
+
+    $.ajax('/' + repoUser + '/' + repoName + '/submit')
+    .always(function() {
+      $resubmit.removeClass('disabled');
+      pollingUpdate(repoUser, repoName);
+    });
+  })
+
+  // Poll if the status is not completed
+  if (data.status != 'COMPLETED') {
+    CONTENT_TIMEOUT = setTimeout(function() {
+      pollingUpdate(repoUser, repoName);
+    }, 1000);
+  }
+
+};
+
+var pollingUpdate = function(repoUser, repoName) {
+  $.ajax('/' + repoUser + '/' + repoName + '/status')
+  .done(function (data) {
+    renderRepo(repoUser, repoName, data);
+  })
+  .fail(function (err) {
+    renderRepo(repoUser, repoName, {status:'UNKNOWN', history:[]})
+  });
+};
+
+
+var MyRouter = Backbone.Router.extend({
+  routes: {
+    ':repoUser/:repoName/': 'goRepo',
+  },
+
+  goRepo: function (repoUser, repoName) {
+    pollingUpdate(repoUser, repoName);
+  }
+});
+
+var router = new MyRouter();
+
+
+
+
+
+buildIcon = function(repoUser, repoName, status) {
+
+  $repoLink = $(REPO_LINK_TEMPLATE);
+
+  $repoLink.children('i')
+  .attr('class', ICON_STATUS_CLASSES[status]);
+
+  $repoLink.children('button')
+  .text(repoUser + '/' + repoName)
+  .on('click', function() {
+    clearTimeout(CONTENT_TIMEOUT);
+    router.navigate('/' + repoUser + '/' + repoName + '/', {trigger:true});
+  });
+
+  return $repoLink;
+};
+
+
+buildRecentRow = function(repoUser, repoName, status) {
+
+  $row = $(RECENT_BUILD_TEMPLATE);
+  $row.attr('class', RECENT_ROW_STATUS_CLASSES[status])
+  $row.children('td').append(buildIcon(repoUser, repoName, status));
+
+  return $row;
+}
+
+
+pollRecent = function() {
+  $.ajax('/recent')
+  .done(function(data) {
+
+    $recentBuilds = $('#recent-builds');
+    $recentBuilds.empty();
+
+    _.each(data, function(task, key) {
+      repoInfo = key.split('/');
+      $recentBuilds.append(buildRecentRow(repoInfo[0], repoInfo[1], task.status));
+    });
+
+    setTimeout(function() {
+      pollRecent();
+    }, 2000);
+  });
+
+}
+
+pollRecent();
+
+Backbone.history.start({pushState:true});
+
+// ]]>
+</script>
+
+
+  </body>
+</html>
