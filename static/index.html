@@ -9,7 +9,7 @@
     <script type='text/javascript' src='/bower_components/underscore/underscore.js'></script>
     <script type='text/javascript' src='/bower_components/backbone/backbone.js'></script>
     <script type='text/javascript' src='/bower_components/moment/moment.js'></script>
-    <script type='text/javascript' src='/bower_components/bootstrap/js/tooltip.js'></script>
+    <script type='text/javascript' src='/bower_components/bootstrap/js/modal.js'></script>
     <script type='text/javascript' src='/bower_components/bootstrap/js/dropdown.js'></script>
 
     <link rel="stylesheet/less" type="text/css" href="/bower_components/bootstrap/less/bootstrap.less" />
@@ -69,14 +69,14 @@ a { color: black; }
       <span class="icon-bar"></span>
       <span class="icon-bar"></span>
     </button>
-    <a class="navbar-brand" href="#">Continuous PDF Generator</a>
+    <a class="navbar-brand" href="https://github.com/philschatz/pdf-ci" target="_window">Continuous PDF Generator</a>
   </div>
 
   <!-- Collect the nav links, forms, and other content for toggling -->
   <div class="collapse navbar-collapse navbar-ex1-collapse">
     <ul class="nav navbar-nav">
-      <li><a href="#">How it Works</a></li>
-      <li><a href="#">Add Me!</a></li>
+      <li><a data-toggle="modal" href="#how-it-works">How it Works</a></li>
+      <li><a data-toggle="modal" href="#how-it-works">Add Me!</a></li>
     </ul>
     <ul class="nav navbar-nav navbar-right">
       <li><a href="https://github.com/philschatz/pdf-ci" target="_window">Fork this on GitHub!</a></li>
@@ -84,6 +84,25 @@ a { color: black; }
   </div><!-- /.navbar-collapse -->
 </nav>
 
+<div class="modal fade" id="how-it-works" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4 class="modal-title">How it Works</h4>
+      </div>
+      <div class="modal-body">
+        <p>Every time a change happens on the master branch of your GitHub repository GitHub will notify us and a PDF will be automatically generated.</p>
+
+        <p>To make it work, you will need to configure your Book repository to send us a message using the "Service Hooks" section in the repositoy "Settings" area.</p>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-dismiss="modal">OK Thanks!</button>
+      </div>
+    </div><!-- /.modal-content -->
+  </div><!-- /.modal-dialog -->
+</div><!-- /.modal -->
 
 <div class="row">
   <div class="col-md-2" id="sidebar">
@@ -131,6 +150,8 @@ a { color: black; }
     <div id="build-log">
       <div><i class="icon-spinner icon-spin"></i> Loading?</div>
     </div>
+
+    <a class="btn pull-right" href="#top">Back to Top <i class="icon-angle-up"></a></a>
 
   </div>
 </div>
