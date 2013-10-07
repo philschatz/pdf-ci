@@ -98,7 +98,16 @@ a { color: black; }
       </table>
     </div>
   </div>
-  <div class="col-md-8" id="build-contents">
+
+  <div class="col-md-8 jumbotron" id="build-empty">
+    <h1>PDFs All The Time!</h1>
+    <p>Generate a PDF every time you update your book and always link to the latest PDF.</p>
+    <p>Just set up a GitHub Web Hook and we'll do the heavy lifting of making a PDF whenever your book changes.
+       Check out some examples by clicking an entry in the "Recent Builds" or submit a new one by clicking:</p>
+    <p><a class="btn btn-primary btn-lg" href="/philschatz/minimal-book/">Build a PDF</a></p>
+  </div>
+
+  <div class="col-md-8 hidden" id="build-contents">
     <h1><span id="build-title"><i class="icon-ok-sign status success"></i> <a href="/" target="_window">test/test</a></span> <a id="build-download" class="pull-right btn btn-success btn-lg" href="pdf"><i class="icon-cloud-download"></i> Download PDF</a></h1>
 
     <ul class="nav nav-tabs">
@@ -216,6 +225,9 @@ var renderRepo = function(repoUser, repoName, data) {
     $duration.removeAttr('endtime');
   }
 
+
+  $('#build-empty').addClass('hidden');
+  $('#build-contents').removeClass('hidden');
 
   // Poll if the status is not completed
   if (data.status != 'COMPLETED') {
