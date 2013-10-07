@@ -413,17 +413,6 @@ module.exports = exports = (argv) ->
 
     res.send(INDEX_FILE)
 
-  app.get '/:repoUser/:repoName/submit', (req, res, next) ->
-    # payload = req.param('payload')
-
-    repoUser = req.param('repoUser')
-    repoName = req.param('repoName')
-
-    task = buildPdf(repoUser, repoName)
-    # Send OK
-    res.send(task.toJSON())
-
-
   app.get '/:repoUser/:repoName/status', (req, res) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
@@ -452,6 +441,45 @@ module.exports = exports = (argv) ->
       res.status(202).send(task.toJSON())
     else
       throw new Error('BUG: Something fell through')
+
+
+  app.get '/:repoUser/:repoName/submit', (req, res, next) ->
+    # payload = req.param('payload')
+
+    repoUser = req.param('repoUser')
+    repoName = req.param('repoName')
+
+    task = buildPdf(repoUser, repoName)
+    # Send OK
+    res.send(task.toJSON())
+
+
+  # GitHub entrypoint
+  app.post '/', (req, res, next) ->
+    payload = req.body.payload # param('payload')
+
+    return res.send('IGNORED') if not payload
+
+    payload = JSON.parse(payload)
+    return res.send('IGNORED') if payload.created or payload.deleted
+
+    # `payload.ref` is of the form `refs/heads/master`
+    refInfo = payload.ref.split('/')
+
+    return res.send('IGNORED') if refInfo[0] != 'refs' or refInfo[1] != 'heads'
+
+    # Ignore anything but the `master` branch
+
+    branchName = refInfo[2]
+    return res.send('IGNORED') if branchName != payload.repository?.master_branch
+
+    repoUser = payload.repository.owner.name
+    repoName = payload.repository.name
+
+
+    task = buildPdf(repoUser, repoName)
+    # Send OK
+    res.send(task.toJSON())
 
   #### Start the server ####
 
