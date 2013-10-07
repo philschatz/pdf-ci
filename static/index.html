@@ -20,6 +20,13 @@
 
     <style type="text/css">
 
+#sidebar td {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#build-details dd { color: #aaa; }
+
 a { color: black; }
 
 .status.active  { color: #999; }
@@ -98,24 +105,18 @@ a { color: black; }
       <li class="disabled"><a href="#">Build History</a></li>
     </ul>
 
-    <div class="panel">
+    <h3>Build Info <button id="build-resubmit" class="btn btn-default pull-right" href="submit">Rebuild PDF</button></h3>
 
-      <h3>Build Info</h3>
+    <dl class="dl-horizontal" id="build-details">
+      <dt>Status:</dt>
+      <dd><span id="build-status">Success</span></dd>
 
-      <div class="row">
-        <div class="col-md-1 field-label">Status:</div>
-        <div class="col-md-9 field-value" id="build-status">Success</div>
-        <div class="col-md-1"><button id="build-resubmit" class="btn btn-default" href="submit">Resubmit Task</button></div>
-      </div>
-      <div class="row">
-        <div class="col-md-1 field-label">Updated:</div>
-        <div class="col-md-2 field-value" id="build-completed"><time datetime="">?? hours ago</time></div>
-      </div>
-      <div class="row">
-        <div class="col-md-1 field-label">Duration:</div>
-        <div class="col-md-2 field-value" id="build-duration">?? min</div>
-      </div>
-    </div>
+      <dt>Created:</dt>
+      <dd><time id="build-created"></time></dd>
+
+      <dt>Duration:</dt>
+      <dd><time id="build-duration"></dd>
+    </dl>
 
     <div id="build-log">
       <div><i class="icon-spinner icon-spin"></i> Loading?</div>
@@ -204,6 +205,17 @@ var renderRepo = function(repoUser, repoName, data) {
     });
   })
 
+  // Update the times
+  $('#build-created').attr('datetime', data.created);
+  $duration = $('#build-duration');
+  $duration.attr('starttime', data.created);
+  if (data.stopped) {
+    $duration.attr('endtime', data.stopped);
+  } else {
+    $duration.removeAttr('endtime');
+  }
+
+
   // Poll if the status is not completed
   if (data.status != 'COMPLETED') {
     CONTENT_TIMEOUT = setTimeout(function() {
@@ -290,6 +302,69 @@ pollRecent = function() {
 pollRecent();
 
 Backbone.history.start({pushState:true});
+
+/* Update Times and Durations */
+
+// Configure moment.js to use '%s seconds' instead of 'a few seconds'
+moment.lang('en', {
+  relativeTime : {
+    s:  "%d seconds",
+
+    future: "in %s",
+    past:   "%s ago",
+    // s:  "seconds",
+    m:  "a minute",
+    mm: "%d minutes",
+    h:  "an hour",
+    hh: "%d hours",
+    d:  "a day",
+    dd: "%d days",
+    M:  "a month",
+    MM: "%d months",
+    y:  "a year",
+    yy: "%d years"
+  }
+});
+
+var updateTimes = function () {
+  // Update all timestamps
+  $('time[datetime]').each(function(i, time) {
+    $time = $(time);
+
+    // Generate a relative time and set it as the text of the `time` element
+    utc = $time.attr('datetime');
+    if (utc) {
+      utcTime = moment.utc(utc);
+      $time.text(utcTime.fromNow()); // Passing `true` would drop the suffix
+    }
+
+  });
+
+
+  // Update all durations
+  $('time[starttime]').each(function(i, time) {
+    $time = $(time);
+
+    // Generate a relative time and set it as the text of the `time` element
+    startTimeUtc = moment.utc($time.attr('starttime'));
+    endTime = $time.attr('endtime');
+    if (endTime) {
+      endTimeUtc = moment.utc(endTime);
+    } else {
+      endTimeUtc = moment(); // Now
+    }
+
+    $time.text(endTimeUtc.from(startTimeUtc, true)); // `true` drops the suffix
+
+  });
+
+
+  setTimeout(function(){
+    updateTimes();
+  }, 1000);
+};
+
+updateTimes();
 
 // ]]>
 </script>

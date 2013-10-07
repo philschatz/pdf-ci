@@ -76,6 +76,7 @@ module.exports = exports = (argv) ->
       status = 'PENDING'   if not @promise.isResolved()
       return {
         created:  @created
+        stopped:  @stopped
         history:  @history
         status:    status
       }
