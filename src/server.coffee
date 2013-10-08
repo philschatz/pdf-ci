@@ -316,7 +316,7 @@ module.exports = exports = (argv) ->
     deferred = Q.defer()
 
     env = {cwd:path.join(DATA_PATH, repoUser, repoName)}
-    child = spawn(argv.pdfgen, [ '--input=xhtml', '--verbose', '--output=/dev/stdout', '-' ], env)
+    child = spawn(argv.pdfgen, [ '--input=xhtml', '--verbose', '--output=-', '-' ], env)
     chunks = []
     chunkLen = 0
 
