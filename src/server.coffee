@@ -40,6 +40,11 @@ module.exports = exports = (argv) ->
   JQUERY_PATH = path.join(__dirname, '..', 'bower_components/jquery/jquery.js')
   JQUERY_CODE = fs.readFileSync(JQUERY_PATH, 'utf-8')
 
+
+  BADGE_STATUS_FAILED   = fs.readFileSync(path.join(__dirname, '..', 'static', 'images', 'status-failed.png'))
+  BADGE_STATUS_COMPLETE = fs.readFileSync(path.join(__dirname, '..', 'static', 'images', 'status-complete.png'))
+  BADGE_STATUS_PENDING  = fs.readFileSync(path.join(__dirname, '..', 'static', 'images', 'status-pending.png'))
+
   class Task
     constructor: () ->
       @created = new Date()
@@ -421,6 +426,22 @@ module.exports = exports = (argv) ->
 
     return res.status(404).send('NOT FOUND. Try adding a commit Hook first.') if not task
     res.send(task.toJSON())
+
+  app.get '/:repoUser/:repoName.png', (req, res) ->
+    repoUser = req.param('repoUser')
+    repoName = req.param('repoName')
+
+    task = STATE.getTask(repoUser, repoName)
+
+    res.header('Content-Type', 'image/png')
+    return res.send(BADGE_STATUS_FAILED) if not task
+
+    switch task.toJSON().status
+      when 'COMPLETED' then res.send(BADGE_STATUS_COMPLETE)
+      when 'PENDING' then res.send(BADGE_STATUS_PENDING)
+      when 'FAILED'  then res.send(BADGE_STATUS_FAILED)
+      else
+        res.send(BADGE_STATUS_FAILED)
 
   app.get '/:repoUser/:repoName/pdf', (req, res) ->
     repoUser = req.param('repoUser')
