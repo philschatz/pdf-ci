@@ -46,7 +46,7 @@ module.exports = exports = (argv) ->
   BADGE_STATUS_PENDING  = fs.readFileSync(path.join(__dirname, '..', 'static', 'images', 'status-pending.png'))
 
   class Task
-    constructor: () ->
+    constructor: (@repoUser, @repoName) ->
       @created = new Date()
       @history = []
 
@@ -91,7 +91,10 @@ module.exports = exports = (argv) ->
     constructor: () ->
       @state = {}
 
-    addTask: (task, repoUser, repoName) ->
+    addTask: (task) ->
+      repoUser = task.repoUser
+      repoName = task.repoName
+
       @state["#{repoUser}/#{repoName}"] = task
 
     getTask: (repoUser, repoName) ->
@@ -120,7 +123,10 @@ module.exports = exports = (argv) ->
         else
           task.notify(line)
 
-  cloneOrPull = (task, repoUser, repoName) ->
+  cloneOrPull = (task) ->
+    repoUser = task.repoUser
+    repoName = task.repoName
+
     # 1. Check if the directory already exists
     # 2. If yes, pull updates
     # 3. Otherwise, clone the repo
@@ -136,9 +142,9 @@ module.exports = exports = (argv) ->
 
     fs.exists path.join(DATA_PATH, repoUser, repoName), (exists) ->
       if exists
-        p = spawnPullCommits(task, repoUser, repoName)
+        p = spawnPullCommits(task)
       else
-        p = spawnCloneRepo(task, repoUser, repoName)
+        p = spawnCloneRepo(task)
       p.fail (err) -> deferred.reject(err)
       p.done (val) -> deferred.resolve(val)
 
@@ -156,7 +162,10 @@ module.exports = exports = (argv) ->
       deferred.resolve()
     return deferred.promise
 
-  spawnCloneRepo = (task, repoUser, repoName) ->
+  spawnCloneRepo = (task) ->
+    repoUser = task.repoUser
+    repoName = task.repoName
+
     url = "https://github.com/#{repoUser}/#{repoName}.git"
     destPath = path.join(DATA_PATH, repoUser, repoName)
 
@@ -164,7 +173,10 @@ module.exports = exports = (argv) ->
     return spawnHelper(task, 'git', [ 'clone', '--verbose', url, destPath ])
 
 
-  spawnPullCommits = (task, repoUser, repoName) ->
+  spawnPullCommits = (task) ->
+    repoUser = task.repoUser
+    repoName = task.repoName
+
     cwd = path.join(DATA_PATH, repoUser, repoName)
 
     task.notify('Pulling remote updates')
@@ -228,7 +240,9 @@ module.exports = exports = (argv) ->
 
 
   # Concatenate all the HTML files in an EPUB together
-  assembleHTML = (task, repoUser, repoName) ->
+  assembleHTML = (task) ->
+    repoUser = task.repoUser
+    repoName = task.repoName
 
     allHtmlFileOrder = []
     allHtml = {}
@@ -312,7 +326,10 @@ module.exports = exports = (argv) ->
                     return joinedHtml
 
 
-  spawnGeneratePDF = (html, task, repoUser, repoName) ->
+  spawnGeneratePDF = (html, task) ->
+    repoUser = task.repoUser
+    repoName = task.repoName
+
     deferred = Q.defer()
 
     env = {cwd:path.join(DATA_PATH, repoUser, repoName)}
@@ -379,10 +396,10 @@ module.exports = exports = (argv) ->
   )
 
   buildPdf = (repoUser, repoName) ->
-    task = new Task()
-    promise = cloneOrPull(task, repoUser, repoName)
+    task = new Task(repoUser, repoName)
+    promise = cloneOrPull(task)
     .then () ->
-      return assembleHTML(task, repoUser, repoName)
+      return assembleHTML(task)
       .then (htmlFragment) ->
         html = """<?xml version='1.0' encoding='utf-8'?>
                   <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
@@ -395,11 +412,11 @@ module.exports = exports = (argv) ->
                     </body>
                   </html>"""
 
-        return spawnGeneratePDF(html, task, repoUser, repoName)
+        return spawnGeneratePDF(html, task)
 
     task.attachPromise(promise)
 
-    STATE.addTask(task, repoUser, repoName)
+    STATE.addTask(task)
     return task
 
   #### Routes ####
