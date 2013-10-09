@@ -323,9 +323,8 @@ pollRecent = function() {
     $recentBuilds = $('#recent-builds');
     $recentBuilds.empty();
 
-    _.each(data, function(task, key) {
-      repoInfo = key.split('/');
-      $recentBuilds.append(buildRecentRow(repoInfo[0], repoInfo[1], task.status));
+    _.each(data, function(task) {
+      $recentBuilds.append(buildRecentRow(task.repoUser, task.repoName, task.status));
     });
 
     setTimeout(function() {

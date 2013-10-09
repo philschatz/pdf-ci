@@ -17,11 +17,15 @@ module.exports = exports = (argv) ->
   URI         = require('URIjs')
   url         = require('url')
   EventEmitter = require('events').EventEmitter
+  mongojs = require('mongojs')
 
   # jsdom only seems to like REMOTE urls to scripts (like jQuery)
   # So, instead, we manually attach jQuery to the window
   jQueryFactory = require('../jquery-module')
 
+
+  # Set up the mongo connection
+  db = mongojs('mydb', ['tasks'])
 
   # Error if required args are not included
   REQUIRED_ARGS = [ 'pdfgen' ]
@@ -47,44 +51,49 @@ module.exports = exports = (argv) ->
 
   class Task
     constructor: (@repoUser, @repoName) ->
-      @created = new Date()
-      @history = []
+
+      @query =
+        repoUser: @repoUser
+        repoName: @repoName
+      doc =
+        repoUser: @repoUser
+        repoName: @repoName
+        created: new Date()
+        history: []
+        status:  'WAITING'
+      db.tasks.update @query, doc, {upsert:true}
+
 
     attachPromise: (@promise) ->
-      @promise.done () =>
-        @stopped = new Date()
-
-      @promise.fail (err) =>
-        @stopped = new Date()
+      @promise.done (pdf) =>
+        fs.writeFileSync(path.join(DATA_PATH, "#{@repoUser}_#{@repoName}.pdf"), pdf)
+        db.tasks.update @query,
+          $set:
+            status: 'COMPLETED'
+            stopped: new Date()
+            updated: new Date()
 
       @promise.fail (err) =>
         # For NodeJS errors convert them to JSON
         if err.path
           err = {msg: err.message, errno:err.errno, path:err.path, code:err.code}
-        @notify('FAILED')
-        @notify(err)
+
+        db.tasks.update @query,
+          $push: {history: err}
+          $set:
+            status: 'FAILED'
+            stopped: new Date()
+            updated: new Date()
 
       @promise.progress (message) =>
         @notify(message)
 
     notify: (message) ->
-      # Only keep the 50 most recent messages
-      #if @history.length > 50
-      #  @history.splice(0,1)
-
-      @history.push(message)
-
-    toJSON: () ->
-      status = 'UNKNOWN'
-      status = 'COMPLETED' if @promise.isFulfilled()
-      status = 'FAILED'    if @promise.isRejected()
-      status = 'PENDING'   if not @promise.isResolved()
-      return {
-        created:  @created
-        stopped:  @stopped
-        history:  @history
-        status:    status
-      }
+      db.tasks.update @query,
+        $push: {history: message}
+        $set:
+          status: 'PENDING'
+          updated: new Date()
 
   # Stores the Promise for a PDF
   STATE = new class State
@@ -416,7 +425,6 @@ module.exports = exports = (argv) ->
 
     task.attachPromise(promise)
 
-    STATE.addTask(task)
     return task
 
   #### Routes ####
@@ -425,7 +433,13 @@ module.exports = exports = (argv) ->
   #   res.redirect("/#{req.param('repoUser')}/#{req.param('repoName')}/")
 
   app.get '/recent', (req, res) ->
-    res.send(STATE.toJSON())
+    db.tasks.find().limit(10).sort {updated:-1}, (err, tasks) ->
+      if err
+        res.status(500).send(err)
+      else
+        tasks = _.map tasks, (task) -> _.omit(task, ['_id', 'history'])
+        res.send(tasks)
+
 
   app.get '/:repoUser/:repoName/', (req, res, next) ->
     res.header('Content-Type', 'text/html')
@@ -439,50 +453,37 @@ module.exports = exports = (argv) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
 
-    task = STATE.getTask(repoUser, repoName)
-
-    return res.status(404).send('NOT FOUND. Try adding a commit Hook first.') if not task
-    res.send(task.toJSON())
+    db.tasks.find {repoUser:repoUser, repoName:repoName}, (err, tasks) ->
+      if err
+        res.status(500).send(err)
+      else if tasks.length
+        res.send(tasks[0])
+      else
+        res.status(404).send('NOT FOUND. Try adding a commit Hook first.')
 
   app.get '/:repoUser/:repoName.png', (req, res) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
 
-    task = STATE.getTask(repoUser, repoName)
-
     res.header('Content-Type', 'image/png')
 
-    # TODO: Until we get a SSL Certificate send the 'Complete' badge because GitHub caches images that do not start with https://
+    # TODO: Until we get a SSL Certificate send the 'COMPLETED' badge because GitHub caches images that do not start with https://
     return res.send(BADGE_STATUS_COMPLETE)
-
-    return res.send(BADGE_STATUS_FAILED) if not task
-
-    switch task.toJSON().status
-      when 'COMPLETED' then res.send(BADGE_STATUS_COMPLETE)
-      when 'PENDING' then res.send(BADGE_STATUS_PENDING)
-      when 'FAILED'  then res.send(BADGE_STATUS_FAILED)
-      else
-        res.send(BADGE_STATUS_FAILED)
 
   app.get '/:repoUser/:repoName/pdf', (req, res) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
 
-    task = STATE.getTask(repoUser, repoName)
-
-    return res.status(404).send('NOT FOUND. Try adding a commit Hook first.') if not task
-
-    promise = task.promise
-    if promise.isResolved()
-      res.header('Content-Type', 'application/pdf')
-      task.promise.done (data) ->
-        res.send(data)
-    else if promise.isRejected()
-      res.status(400).send(task.toJSON())
-    else if not promise.isFulfilled()
-      res.status(202).send(task.toJSON())
-    else
-      throw new Error('BUG: Something fell through')
+    db.tasks.find {repoUser:repoUser, repoName:repoName, status: 'COMPLETED'}, (err, tasks) ->
+      if err
+        res.status(500).send(err)
+      else if tasks.length
+        fsReadFile(path.join(DATA_PATH, "#{repoUser}_#{repoName}.pdf"))
+        .then (data) ->
+          res.header('Content-Type', 'application/pdf')
+          res.send(data)
+      else
+        res.redirect("/#{repoUser}/#{repoName}/")
 
 
   app.get '/:repoUser/:repoName/submit', (req, res, next) ->
@@ -493,7 +494,7 @@ module.exports = exports = (argv) ->
 
     task = buildPdf(repoUser, repoName)
     # Send OK
-    res.send(task.toJSON())
+    res.send('OK')
 
 
   # GitHub entrypoint
@@ -521,7 +522,7 @@ module.exports = exports = (argv) ->
 
     task = buildPdf(repoUser, repoName)
     # Send OK
-    res.send(task.toJSON())
+    res.send('OK')
 
   #### Start the server ####
 
