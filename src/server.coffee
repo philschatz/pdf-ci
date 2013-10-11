@@ -10,7 +10,6 @@ module.exports = exports = (argv) ->
   spawn       = require('child_process').spawn
   express     = require('express')
   path        = require('path')
-  fs          = require('fs') # Just to load the HTML files
   Q           = require('q') # Promise library
   _           = require('underscore')
   jsdom       = require('jsdom')
@@ -19,9 +18,16 @@ module.exports = exports = (argv) ->
   EventEmitter = require('events').EventEmitter
   mongojs = require('mongojs')
 
+  fs          = require('./fs-helpers') # Async `fs.*` calls wrapped as promises
+  MongoFsHelper = require('./mongo-fs-helper')
+
   # jsdom only seems to like REMOTE urls to scripts (like jQuery)
   # So, instead, we manually attach jQuery to the window
-  jQueryFactory = require('../jquery-module')
+  jQueryFactory = require('./jquery-module')
+
+
+  CONNECTION_URL = 'mongodb://127.0.0.1:27017/mydb'
+  mongoFsHelper = new MongoFsHelper(CONNECTION_URL)
 
 
   # Set up the mongo connection
@@ -50,26 +56,20 @@ module.exports = exports = (argv) ->
   BADGE_STATUS_PENDING  = fs.readFileSync(path.join(__dirname, '..', 'static', 'images', 'status-pending.png'))
 
   class Task
-    constructor: (@repoUser, @repoName) ->
+    constructor: (@repoUser, @repoName, @buildId) ->
 
       @query =
         repoUser: @repoUser
         repoName: @repoName
-      doc =
-        repoUser: @repoUser
-        repoName: @repoName
-        created: new Date()
-        history: []
-        status:  'WAITING'
-      db.tasks.update @query, doc, {upsert:true}
-
+        build:    @buildId
 
     attachPromise: (@promise) ->
       @promise.done (pdf) =>
-        fs.writeFileSync(path.join(DATA_PATH, "#{@repoUser}_#{@repoName}.pdf"), pdf)
+        fs.writeFileSync(path.join(DATA_PATH, "#{@repoUser}/#{@repoName}.pdf"), pdf)
         db.tasks.update @query,
           $set:
             status: 'COMPLETED'
+            lastCompletedBuild: @buildId
             stopped: new Date()
             updated: new Date()
 
@@ -95,278 +95,7 @@ module.exports = exports = (argv) ->
           status: 'PENDING'
           updated: new Date()
 
-  # Stores the Promise for a PDF
-  STATE = new class State
-    constructor: () ->
-      @state = {}
 
-    addTask: (task) ->
-      repoUser = task.repoUser
-      repoName = task.repoName
-
-      @state["#{repoUser}/#{repoName}"] = task
-
-    getTask: (repoUser, repoName) ->
-      return @state["#{repoUser}/#{repoName}"]
-
-    toJSON: () ->
-      json = {}
-      _.each @state, (task, key) ->
-        value = _.omit(task, 'history')
-        json[key] = value
-
-      return json
-
-  #### Spawns ####
-  env =
-    env: process.env
-  env.env['PDF_BIN'] = argv.pdfgen
-
-  errLogger = (task, isError) -> (data) ->
-    lines = data.toString().split('\n')
-    for line in lines
-      if line.length > 1
-        if isError
-          task.notify("STDERR: #{line}")
-          console.error("STDERR: #{line}")
-        else
-          task.notify(line)
-
-  cloneOrPull = (task) ->
-    repoUser = task.repoUser
-    repoName = task.repoName
-
-    # 1. Check if the directory already exists
-    # 2. If yes, pull updates
-    # 3. Otherwise, clone the repo
-
-    deferred = Q.defer()
-
-    # return fsExists(path.join(DATA_PATH, repoUser, repoName))
-    # .then (exists) ->
-    #   if exists
-    #     return spawnPullCommits(task, repoUser, repoName)
-    #   else
-    #     return spawnCloneRepo(task, repoUser, repoName)
-
-    fs.exists path.join(DATA_PATH, repoUser, repoName), (exists) ->
-      if exists
-        p = spawnPullCommits(task)
-      else
-        p = spawnCloneRepo(task)
-      p.fail (err) -> deferred.reject(err)
-      p.done (val) -> deferred.resolve(val)
-
-    return deferred.promise
-
-
-  spawnHelper = (task, cmd, args=[], options={}) ->
-    child = spawn(cmd, args, options)
-    child.stderr.on 'data', errLogger(task, true)
-    child.stdout.on 'data', errLogger(task, false)
-
-    deferred = Q.defer()
-    child.on 'exit', (code) ->
-      return deferred.reject('Returned nonzero error code') if 0 != code
-      deferred.resolve()
-    return deferred.promise
-
-  spawnCloneRepo = (task) ->
-    repoUser = task.repoUser
-    repoName = task.repoName
-
-    url = "https://github.com/#{repoUser}/#{repoName}.git"
-    destPath = path.join(DATA_PATH, repoUser, repoName)
-
-    task.notify('Cloning repo')
-    return spawnHelper(task, 'git', [ 'clone', '--verbose', url, destPath ])
-
-
-  spawnPullCommits = (task) ->
-    repoUser = task.repoUser
-    repoName = task.repoName
-
-    cwd = path.join(DATA_PATH, repoUser, repoName)
-
-    task.notify('Pulling remote updates')
-    return spawnHelper(task, 'git', [ 'pull' ], {cwd:cwd})
-
-
-  # From: http://stackoverflow.com/questions/13192660/nodejs-error-emfile
-  # Queuing reads and writes, so your nodejs script doesn't overwhelm system limits catastrophically
-  maxFilesInFlight = 100 # Set this value to some number safeish for your system
-  origRead = fs.readFile
-  origWrite = fs.writeFile
-  activeCount = 0
-  pending = []
-  wrapCallback = (cb) ->
-    ->
-      activeCount--
-      cb.apply this, Array::slice.call(arguments)
-      if activeCount < maxFilesInFlight and pending.length
-        # console.log "Processing Pending read/write"
-        pending.shift()()
-
-  fs.readFile = ->
-    args = Array::slice.call(arguments)
-    if activeCount < maxFilesInFlight
-      if args[1] instanceof Function
-        args[1] = wrapCallback(args[1])
-      else args[2] = wrapCallback(args[2])  if args[2] instanceof Function
-      activeCount++
-      origRead.apply fs, args
-    else
-      # console.log "Delaying read:", args[0]
-      pending.push ->
-        fs.readFile.apply fs, args
-
-
-  fsReadDir   = () -> Q.nfapply(fs.readdir,   arguments)
-  fsStat      = () -> Q.nfapply(fs.stat,      arguments)
-  fsReadFile  = () -> Q.nfapply(fs.readFile,  arguments)
-
-  # Given an HTML (or XML) string, return a Promise of a jQuery object
-  buildJQuery = (uri, xml) ->
-    deferred = Q.defer()
-    #jsdom.env html, [ "file://#{JQUERY_PATH}" ], (err, window) ->
-    jsdom.env
-      html: xml
-      # src: [ "//<![CDATA[\n#{JQUERY_CODE}\n//]]>" ]
-      # scripts: [ "http://code.jquery.com/jquery.js" ] # [ "file://#{JQUERY_PATH}" ]
-      # scripts: [ "#{argv.u}/jquery.js" ]
-      done: (err, window) ->
-        return deferred.reject(err) if err
-
-        # Attach jQuery to the window
-        jQueryFactory(window)
-
-        if window.jQuery
-          deferred.notify {msg: 'jQuery built for file', path: uri.toString()}
-          deferred.resolve(window.jQuery)
-        else
-          deferred.reject('Problem loading jQuery...')
-    return deferred.promise
-
-
-  # Concatenate all the HTML files in an EPUB together
-  assembleHTML = (task) ->
-    repoUser = task.repoUser
-    repoName = task.repoName
-
-    allHtmlFileOrder = []
-    allHtml = {}
-
-    # 1. Read the META-INF/container.xml file
-    # 2. Read the first OPF file
-    # 3. Read the ToC Navigation file (relative to the OPF file)
-    # 4. Read each HTML file linked to from the ToC file (relative to the ToC file)
-
-    root = new URI(path.join(DATA_PATH, repoUser, repoName) + '/')
-
-    readUri = (uri) ->
-      filePath = decodeURIComponent(uri.absoluteTo(root).toString())
-      task.notify {msg:'Reading file', path:uri.toString()}
-      fsReadFile(filePath)
-
-
-    # Check that a mimetype file exists
-    task.notify('Checking if mimetype file exists')
-    return readUri(new URI('mimetype'))
-    .then (mimeTypeStr) ->
-      # Fail if the mimetype file is invalid
-      if 'application/epub+zip' != mimeTypeStr.toString().trim()
-        return Q.defer().reject('Invalid mimetype file')
-
-      # 1. Read the META-INF/container.xml file
-      containerUri = new URI('META-INF/container.xml')
-      return readUri(containerUri)
-      .then (containerXml) ->
-        return buildJQuery(containerUri, containerXml)
-        .then ($) ->
-          # 2. Read the first OPF file
-          $opf = $('container > rootfiles > rootfile[media-type="application/oebps-package+xml"]').first()
-          opfPath = $opf.attr('full-path')
-          opfUri = new URI(opfPath)
-          return readUri(opfUri)
-          .then (opfXml) ->
-            # Find the absolute path to the ToC navigation file
-            return buildJQuery(opfUri, opfXml)
-            .then ($) ->
-              $navItem = $('package > manifest > item[properties^="nav"]')
-              navPath = $navItem.attr('href')
-
-              # 3. Read the ToC Navigation file (relative to the OPF file)
-              task.notify('Reading ToC Navigation file')
-              navUri = new URI(navPath)
-              navUri = navUri.absoluteTo(opfUri) # Make sure navUri is absolute because it is used later to load HTML files
-              return readUri(navUri)
-              .then (navHtml) ->
-                return buildJQuery(navUri, navHtml)
-                .then ($) ->
-                  # 4. Read each HTML file linked to from the ToC file (relative to the ToC file)
-                  $toc = $('nav')
-
-                  anchorPromises = _.map $toc.find('a'), (a) ->
-                    $a = $(a)
-                    href = $a.attr('href')
-
-                    fileUri = new URI(href)
-                    fileUri = fileUri.absoluteTo(navUri)
-
-                    # Remember the order of files so they can be concatenated again
-                    allHtmlFileOrder.push(fileUri.toString())
-
-                    return readUri(fileUri)
-                    .then (html) ->
-                      return buildJQuery(fileUri, html)
-                      .then ($) ->
-                        allHtml[fileUri.toString()] = $('body')[0].innerHTML
-
-                  # Concatenate all the HTML once they have all been parsed
-                  return Q.all(anchorPromises)
-                  .then () ->
-                    task.notify {msg:'Combining HTML files', count:allHtmlFileOrder.length}
-
-                    htmls = []
-                    for key in allHtmlFileOrder
-                      htmls.push(allHtml[key])
-                    joinedHtml = htmls.join('\n')
-                    task.notify {msg:'Combined HTML files', size:joinedHtml.length}
-                    return joinedHtml
-
-
-  spawnGeneratePDF = (html, task) ->
-    repoUser = task.repoUser
-    repoName = task.repoName
-
-    deferred = Q.defer()
-
-    env = {cwd:path.join(DATA_PATH, repoUser, repoName)}
-    child = spawn(argv.pdfgen, [ '--input=xhtml', '--verbose', '--output=-', '-' ], env)
-    chunks = []
-    chunkLen = 0
-
-    child.stderr.on 'data', errLogger(task)
-
-    child.stdout.on 'data', (chunk) ->
-      chunks.push chunk
-      chunkLen += chunk.length
-
-    child.stdin.write html, 'utf-8', () ->
-      deferred.notify('Sent input to PDFGEN')
-      child.stdin.end()
-
-    child.on 'exit', (code) ->
-      return deferred.reject('PDF generation failed') if 0 != code
-
-      buf = new Buffer(chunkLen)
-      pos = 0
-      for chunk in chunks
-        chunk.copy(buf, pos)
-        pos += chunk.length
-      deferred.resolve(buf)
-
-    return deferred.promise
 
 
   # Create the main application object, app.
@@ -405,27 +134,31 @@ module.exports = exports = (argv) ->
   )
 
   buildPdf = (repoUser, repoName) ->
-    task = new Task(repoUser, repoName)
-    promise = cloneOrPull(task)
-    .then () ->
-      return assembleHTML(task)
-      .then (htmlFragment) ->
-        html = """<?xml version='1.0' encoding='utf-8'?>
-                  <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
-                  <html xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                      <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
-                    </head>
-                    <body>
-                    #{htmlFragment}
-                    </body>
-                  </html>"""
 
-        return spawnGeneratePDF(html, task)
+    # Add a document to the db
+    query =
+      repoUser: repoUser
+      repoName: repoName
+    updateDoc =
+      $set:
+        created: new Date()
+        updated: new Date()
+        status:  'WAITING'
+      $inc: {build: 1}
 
-    task.attachPromise(promise)
+    findArgs =
+      findAndModify: 'tasks'
+      query:  query
+      update: updateDoc
+      fields: {build: 1} # Only return the build number
+      new:    true # return the updated Doc
+      upsert: true
 
-    return task
+    return Q.ninvoke(db.tasks, 'findAndModify', findArgs)
+    .then (updatedResp) ->
+      # For some reason updatedResp is an array with the object in [0] and documented response as the 2nd argument
+      return updatedResp[0].value?.build
+      # buildId = updatedResp[1].value.build # Used to get the build id
 
   #### Routes ####
 
@@ -457,7 +190,37 @@ module.exports = exports = (argv) ->
       if err
         res.status(500).send(err)
       else if tasks.length
-        res.send(tasks[0])
+        task = _.extend {}, tasks[0]
+
+        # FIXME: clear the log file when the task is set to 'WAITING' instead
+        if 'WAITING' == task.status
+          task.history = []
+          return res.send(task)
+
+        # Read the log to attach to history
+        filePath = path.join(DATA_PATH, repoUser, "#{repoName}.log")
+        fs.exists filePath, (fileExists) ->
+          if fileExists
+            promise = fs.readFile(filePath)
+            promise.fail (err) ->
+              if 'PENDING' == task.status
+                task.history = []
+              else
+                task.history = ['(No Log Found for this build)']
+              res.send(task)
+
+            promise.done (buf) ->
+              task.history = buf.toString().trim().split('\n') # Remove the trailing newline
+              res.send(task)
+          else
+            # Log file not found. either return empty (it will be filled by the slave)
+            # or put in an error message saying it is missing
+            if 'PENDING' == task.status
+              task.history = []
+            else
+              task.history = ['(No Log Found for this build)']
+            res.send(task)
+
       else
         res.status(404).send('NOT FOUND. Try adding a commit Hook first.')
 
@@ -474,14 +237,25 @@ module.exports = exports = (argv) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
 
-    db.tasks.find {repoUser:repoUser, repoName:repoName, status: 'COMPLETED'}, (err, tasks) ->
+    db.tasks.find {repoUser:repoUser, repoName:repoName}, (err, tasks) ->
       if err
         res.status(500).send(err)
       else if tasks.length
-        fsReadFile(path.join(DATA_PATH, "#{repoUser}_#{repoName}.pdf"))
-        .then (data) ->
+        sha = tasks[0].lastBuiltSha
+
+        # A PDF has never been successfully generated
+        return res.status(404).send() if not sha
+
+        # Read the file (if it exists) from GridFS
+        # TODO: Use a stream (not sure how to stream response in express)
+        mongoFsHelper.readFile(repoUser, repoName)
+        # A PDF has been built before but it is not in the GridFS
+        .fail((err) -> res.status(500).send(err))
+        .done (buf) ->
+          # A PDF has been found, send it.
           res.header('Content-Type', 'application/pdf')
-          res.send(data)
+          res.send(buf)
+
       else
         res.redirect("/#{repoUser}/#{repoName}/")
 
@@ -492,7 +266,8 @@ module.exports = exports = (argv) ->
     repoUser = req.param('repoUser')
     repoName = req.param('repoName')
 
-    task = buildPdf(repoUser, repoName)
+    promise = buildPdf(repoUser, repoName)
+    promise.fail((err) -> console.error('Problem submitting task', err))
     # Send OK
     res.send('OK')
 

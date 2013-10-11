@@ -153,7 +153,7 @@ a { color: black; }
       <div><i class="icon-spinner icon-spin"></i> Loading?</div>
     </div>
 
-    <a class="btn pull-right" href="#top">Back to Top <i class="icon-angle-up"></a></a>
+    <a class="btn pull-right" href="#top">Back to Top <i class="icon-angle-up"></i></a>
 
   </div>
 </div>
@@ -163,15 +163,17 @@ a { color: black; }
 
 ICON_STATUS_CLASSES = {
   'UNKNOWN':    'icon-question-sign status unknown',
-  'COMPLETED':  'icon-ok-sign status success',
+  'WAITING':    'icon-spinner status active',
   'PENDING':    'icon-spinner icon-spin status active',
-  'FAILED':     'icon-remove-sign status danger'
+  'FAILED':     'icon-remove-sign status danger',
+  'COMPLETED':  'icon-ok-sign status success'
 };
 
 RECENT_ROW_STATUS_CLASSES = {
-  'COMPLETED':  '',
+  'WAITING':    'active',
   'PENDING':    'active',
-  'FAILED':     'danger'
+  'FAILED':     'danger',
+  'COMPLETED':  ''
 };
 
 
@@ -242,10 +244,10 @@ var renderRepo = function(repoUser, repoName, data) {
   $('#build-created').attr('datetime', data.created);
   $duration = $('#build-duration');
   $duration.attr('starttime', data.created);
-  if (data.stopped) {
-    $duration.attr('endtime', data.stopped);
-  } else {
+  if ('PENDING' == data.status) {
     $duration.removeAttr('endtime');
+  } else {
+    $duration.attr('endtime', data.updated);
   }
 
 
