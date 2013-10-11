@@ -163,15 +163,17 @@ a { color: black; }
 
 ICON_STATUS_CLASSES = {
   'UNKNOWN':    'icon-question-sign status unknown',
-  'COMPLETED':  'icon-ok-sign status success',
+  'WAITING':    'icon-spinner status active',
   'PENDING':    'icon-spinner icon-spin status active',
-  'FAILED':     'icon-remove-sign status danger'
+  'FAILED':     'icon-remove-sign status danger',
+  'COMPLETED':  'icon-ok-sign status success'
 };
 
 RECENT_ROW_STATUS_CLASSES = {
-  'COMPLETED':  '',
+  'WAITING':    'active',
   'PENDING':    'active',
-  'FAILED':     'danger'
+  'FAILED':     'danger',
+  'COMPLETED':  ''
 };
 
 
@@ -242,10 +244,10 @@ var renderRepo = function(repoUser, repoName, data) {
   $('#build-created').attr('datetime', data.created);
   $duration = $('#build-duration');
   $duration.attr('starttime', data.created);
-  if (data.stopped) {
-    $duration.attr('endtime', data.stopped);
-  } else {
+  if ('PENDING' == data.status) {
     $duration.removeAttr('endtime');
+  } else {
+    $duration.attr('endtime', data.updated);
   }
 
 
@@ -323,9 +325,8 @@ pollRecent = function() {
     $recentBuilds = $('#recent-builds');
     $recentBuilds.empty();
 
-    _.each(data, function(task, key) {
-      repoInfo = key.split('/');
-      $recentBuilds.append(buildRecentRow(repoInfo[0], repoInfo[1], task.status));
+    _.each(data, function(task) {
+      $recentBuilds.append(buildRecentRow(task.repoUser, task.repoName, task.status));
     });
 
     setTimeout(function() {
