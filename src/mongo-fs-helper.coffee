@@ -1,9 +1,10 @@
 mongodb = require('mongodb')
-Q           = require('q') # Promise library
+Q       = require('q') # Promise library
 
 
 module.exports = class MongoGridFsHelper
   constructor: (@_mongoConnectionUrl) ->
+    @_mongoConnectionUrl = "mongodb://#{@_mongoConnectionUrl}" if not /^mongodb:\/\//.test(@_mongoConnectionUrl)
 
   # Returns a promise containing the md5 hash of the file written to the GridStore
   createWriteSink: (repoUser, repoName) ->

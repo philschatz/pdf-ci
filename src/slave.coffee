@@ -12,12 +12,12 @@ EpubAssembler = require('./epub-assembler')
 MongoFsHelper = require('./mongo-fs-helper')
 
 
-CONNECTION_URL = 'mongodb://127.0.0.1:27017/mydb'
-mongoFsHelper = new MongoFsHelper(CONNECTION_URL)
+MONGO_CONNECTION_URL = '127.0.0.1:27017/mydb'
+mongoFsHelper = new MongoFsHelper(MONGO_CONNECTION_URL)
 
 
 # Set up the mongo connection
-db = mongojs('mydb', ['tasks'])
+db = mongojs(MONGO_CONNECTION_URL, ['tasks'])
 
 # Error if required args are not included
 argv = process.argv
@@ -210,34 +210,30 @@ runLoop = () ->
     db.tasks.update taskInfo, {$set:{status:'PENDING'}}, (err, val) ->
       return delayedRunLoop() if err
 
-      # Make sure the log dir exists
-      fs.mkdir path.join(DATA_PATH, taskInfo.repoUser), (err) ->
-        throw new Error 'ERROR: Problem creating logfile directory!' if err
+      # Open up the Log file
+      logStream = fs.createWriteStream(path.join(DATA_PATH, taskInfo.repoUser, "#{taskInfo.repoName}.log"))
+      rootPath = path.join(DATA_PATH, taskInfo.repoUser, taskInfo.repoName)
 
-        # Open up the Log file
-        logStream = fs.createWriteStream(path.join(DATA_PATH, taskInfo.repoUser, "#{taskInfo.repoName}.log"))
-        rootPath = path.join(DATA_PATH, taskInfo.repoUser, taskInfo.repoName)
-
-        # Update async whenever data is sent to the log
-        logStream.on 'data', (buf) ->
-          now = new Date()
-          query2 = _.extend {}, query, {$lt: {updated: now}}
-          db.tasks.update query2, {set: {updated: now}}
+      # Update async whenever data is sent to the log
+      logStream.on 'data', (buf) ->
+        now = new Date()
+        query2 = _.extend {}, query, {$lt: {updated: now}}
+        db.tasks.update query2, {set: {updated: now}}
 
 
-        promise = buildPdf(taskInfo.repoUser, taskInfo.repoName, rootPath, logStream)
+      promise = buildPdf(taskInfo.repoUser, taskInfo.repoName, rootPath, logStream)
 
-        query =
-          repoUser: taskInfo.repoUser
-          repoName: taskInfo.repoName
-          build: taskInfo.build
+      query =
+        repoUser: taskInfo.repoUser
+        repoName: taskInfo.repoName
+        build: taskInfo.build
 
-        promise.fail (err) ->
-          db.tasks.update query, {$set:{status:'FAILED', updated:new Date(), err:err}}, (err, value) ->
+      promise.fail (err) ->
+        db.tasks.update query, {$set:{status:'FAILED', updated:new Date(), err:err}}, (err, value) ->
 
-        promise.done (md5) ->
-          db.tasks.update query, {$set:{status:'COMPLETED', updated:new Date(),lastBuiltSha:md5}}, (err, value) ->
-          delayedRunLoop()
+      promise.done (md5) ->
+        db.tasks.update query, {$set:{status:'COMPLETED', updated:new Date(),lastBuiltSha:md5}}, (err, value) ->
+        delayedRunLoop()
 
       return
 

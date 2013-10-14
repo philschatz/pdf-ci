@@ -26,12 +26,12 @@ module.exports = exports = (argv) ->
   jQueryFactory = require('./jquery-module')
 
 
-  CONNECTION_URL = 'mongodb://127.0.0.1:27017/mydb'
+  CONNECTION_URL = '127.0.0.1:27017/mydb'
   mongoFsHelper = new MongoFsHelper(CONNECTION_URL)
 
 
   # Set up the mongo connection
-  db = mongojs('mydb', ['tasks'])
+  db = mongojs(CONNECTION_URL, ['tasks'])
 
   # Error if required args are not included
   REQUIRED_ARGS = [ 'pdfgen' ]
