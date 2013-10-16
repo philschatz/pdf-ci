@@ -34,9 +34,9 @@ Submit a job by going to [http://localhost:3001/philschatz/minimal-book/]() and 
 - `[X]` Show status webpage
 - `[X]` read EPUB files (META-INF/container.xml, OPF file, ToC HTML)
 - `[X]` run `git clone` or `git pull` from command line
-- `[ ]` write `POST` route for GitHub Service Hooks
-- `[ ]` distinguish commit from branch or other hooks
-- `[ ]` add a Status Image to include in GitHub README
-- `[ ]` store PDFs on file system
-- `[ ]` store tasks in SQL(lite?) database
-- `[ ]` create slave task
+- `[X]` write `POST` route for GitHub Service Hooks
+- `[X]` distinguish commit from branch or other hooks
+- `[X]` add a Status Image to include in GitHub README
+- `[X]` store PDFs on file system
+- `[X]` store tasks in database (MongoDB)
+- `[X]` create slave task
