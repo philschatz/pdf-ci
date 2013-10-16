@@ -139,18 +139,21 @@ module.exports = exports = (argv) ->
         status:  'WAITING'
       $inc: {build: 1}
 
-    findArgs =
-      findAndModify: 'tasks'
-      query:  query
-      update: updateDoc
-      fields: {build: 1} # Only return the build number
-      new:    true # return the updated Doc
-      upsert: true
+    # For some reason mongodb server does not like this JSON.
+    # Perform a simple update instead.
+    #
+    # findArgs =
+    #   query:  query
+    #   update: updateDoc
+    #   fields: {build: 1} # Only return the build number
+    #   new:    true # return the updated Doc
+    #   upsert: true
+    # return Q.ninvoke(db.tasks, 'findAndModify', findArgs)
 
-    return Q.ninvoke(db.tasks, 'findAndModify', findArgs)
+    return Q.ninvoke(db.tasks, 'update', query, updateDoc)
     .then (updatedResp) ->
       # For some reason updatedResp is an array with the object in [0] and documented response as the 2nd argument
-      return updatedResp[0].value?.build
+      # return updatedResp[0].value?.build
       # buildId = updatedResp[1].value.build # Used to get the build id
 
   #### Routes ####
