@@ -150,7 +150,7 @@ module.exports = exports = (argv) ->
     #   upsert: true
     # return Q.ninvoke(db.tasks, 'findAndModify', findArgs)
 
-    return Q.ninvoke(db.tasks, 'update', query, updateDoc)
+    return Q.ninvoke(db.tasks, 'update', query, updateDoc, {upsert:true})
     .then (updatedResp) ->
       # For some reason updatedResp is an array with the object in [0] and documented response as the 2nd argument
       # return updatedResp[0].value?.build
