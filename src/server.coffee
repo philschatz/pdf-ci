@@ -33,13 +33,6 @@ module.exports = exports = (argv) ->
   # Set up the mongo connection
   db = mongojs(CONNECTION_URL, ['tasks'])
 
-  # Error if required args are not included
-  REQUIRED_ARGS = [ 'pdfgen' ]
-  REQUIRED_ARGS.forEach (arg) ->
-    if not argv[arg]
-      console.error "Required command line argument missing: #{arg}"
-      throw new Error "Required command line argument missing"
-
 
   # Enable easy-to-read stack traces
   #Q.longStackSupport = true
