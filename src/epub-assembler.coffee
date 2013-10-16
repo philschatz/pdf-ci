@@ -1,4 +1,3 @@
-
 _             = require('underscore')
 Q             = require('q')
 jsdom         = require('jsdom')
@@ -106,7 +105,14 @@ module.exports = class Assembler
             .then (html) =>
               return @_buildJQuery(fileUri, html)
               .then ($) =>
-                allHtml[fileUri.toString()] = $('body')[0].innerHTML
+                # Rewrite all `<img src="...">` attributes to be relative to the root of the repo
+                $('img[src]:not([src^=http])').each (i, img) ->
+                  $img = $(img)
+                  src = $img.attr('src')
+                  src = new URI(src)
+                  src = src.absoluteTo(fileUri)
+                  $img.attr('src', src.toString())
+                allHtml[fileUri.toString()] = $('body').html()
 
           # Concatenate all the HTML once they have all been parsed
           return Q.all(anchorPromises)
