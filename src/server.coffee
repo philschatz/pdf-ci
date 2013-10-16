@@ -26,7 +26,7 @@ module.exports = exports = (argv) ->
   jQueryFactory = require('./jquery-module')
 
 
-  CONNECTION_URL = '127.0.0.1:27017/mydb'
+  CONNECTION_URL = '127.0.0.1:27017/local'
   mongoFsHelper = new MongoFsHelper(CONNECTION_URL)
 
 

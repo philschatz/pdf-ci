@@ -12,7 +12,7 @@ EpubAssembler = require('./epub-assembler')
 MongoFsHelper = require('./mongo-fs-helper')
 
 
-MONGO_CONNECTION_URL = '127.0.0.1:27017/mydb'
+MONGO_CONNECTION_URL = '127.0.0.1:27017/local'
 mongoFsHelper = new MongoFsHelper(MONGO_CONNECTION_URL)
 
 
