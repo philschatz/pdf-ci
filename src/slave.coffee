@@ -11,24 +11,28 @@ mongojs = require('mongojs')
 EpubAssembler = require('./epub-assembler')
 MongoFsHelper = require('./mongo-fs-helper')
 
+# Add the path to the PDF gen
+args = require('./cli')
+argv = args
+.options('g',
+  alias     : 'pdfgen'
+  demand    : true
+  describe  : 'Path to executable that converts HTML to PDF (PrinceXML)'
+).argv
 
-MONGO_CONNECTION_URL = '127.0.0.1:27017/local'
-mongoFsHelper = new MongoFsHelper(MONGO_CONNECTION_URL)
+
+mongoFsHelper = new MongoFsHelper(argv.mongodb)
 
 
 # Set up the mongo connection
-db = mongojs(MONGO_CONNECTION_URL, ['tasks'])
-
-# Error if required args are not included
-argv = process.argv
-argv.pdfgen = argv[2]
+db = mongojs(argv.mongodb, ['tasks'])
 
 # Enable easy-to-read stack traces
 #Q.longStackSupport = true
 # Silently fail instead of taking down the webserver
 Q.onerror = (err) -> console.error(err)
 
-DATA_PATH = path.join(__dirname, '..', 'data')
+DATA_PATH = argv.data
 
 
 #### Spawns ####

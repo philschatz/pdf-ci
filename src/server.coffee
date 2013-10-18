@@ -18,7 +18,19 @@ if true
 
   fs          = require('./fs-helpers') # Async `fs.*` calls wrapped as promises
   MongoFsHelper = require('./mongo-fs-helper')
-  argv = require('./cli').argv
+  args = require('./cli')
+  argv = args
+  .options('o',
+    alias     : 'host'
+    default   : ''
+    describe  : 'Host to accept connections on, false == any'
+  )
+  .options('p',
+    alias     : 'port'
+    default   : 3001
+    describe  : 'Port'
+  ).argv
+
 
   # jsdom only seems to like REMOTE urls to scripts (like jQuery)
   # So, instead, we manually attach jQuery to the window

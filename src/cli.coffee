@@ -2,7 +2,6 @@
 
 path = require 'path'
 optimist = require 'optimist'
-server = require './server'
 
 # Handle command line options
 
@@ -13,19 +12,9 @@ args = optimist
     boolean   : true
     describe  : 'Show this help info and exit'
   )
-  .options('o',
-    alias     : 'host'
-    default   : ''
-    describe  : 'Host to accept connections on, false == any'
-  )
-  .options('p',
-    alias     : 'port'
-    default   : 3001
-    describe  : 'Port'
-  )
   .options('d',
     alias     : 'data'
-    default   : path.join(__dirname, 'data')
+    default   : path.join(__dirname, '..', 'data')
     describe  : 'Path to writable data directory'
   )
   .options('m',
