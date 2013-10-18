@@ -122,16 +122,17 @@ if true
 
   buildPdf = (repoUser, repoName) ->
 
-    # Add a document to the db
-    query =
-      repoUser: repoUser
-      repoName: repoName
+    # Add/edit a document to the db
     updateDoc =
-      $set:
+      #$set:
+        # Use _id because `.update(... {upsert:true})` seems to forget to create a _id when inserting
+        _id: "#{repoUser}/#{repoName}"
+        repoUser: repoUser
+        repoName: repoName
         created: new Date()
         updated: new Date()
         status:  'WAITING'
-      $inc: {build: 1}
+      #$inc: {build: 1}
 
     # For some reason mongodb server does not like this JSON.
     # Perform a simple update instead.
@@ -144,7 +145,7 @@ if true
     #   upsert: true
     # return Q.ninvoke(db.tasks, 'findAndModify', findArgs)
 
-    return Q.ninvoke(db.tasks, 'update', query, updateDoc, {upsert:true})
+    return Q.ninvoke(db.tasks, 'save', updateDoc)
     .then (updatedResp) ->
       # For some reason updatedResp is an array with the object in [0] and documented response as the 2nd argument
       # return updatedResp[0].value?.build
