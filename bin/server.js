@@ -3,4 +3,4 @@
 // Executable cli for the express port of Smallest Federated Wiki
 
 require('coffee-script');
-require('../src/cli');
+require('../src/server');

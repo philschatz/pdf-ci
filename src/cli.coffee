@@ -1,4 +1,4 @@
-# Cli for the mock express server
+# Cli for the express server
 
 path = require 'path'
 optimist = require 'optimist'
@@ -6,7 +6,7 @@ server = require './server'
 
 # Handle command line options
 
-argv = optimist
+args = optimist
   .usage('Usage: $0')
   .options('h',
     alias     : 'help'
@@ -18,45 +18,25 @@ argv = optimist
     default   : ''
     describe  : 'Host to accept connections on, false == any'
   )
-  .options('u',
-    alias     : 'url'
-    default   : ''
-    describe  : 'Url to be used for the realm in openID'
-  )
   .options('p',
     alias     : 'port'
     default   : 3001
     describe  : 'Port'
   )
-  .options('r',
-    alias     : 'root'
-    default   : path.join(__dirname)
-    describe  : 'Application root folder'
+  .options('d',
+    alias     : 'data'
+    default   : path.join(__dirname, 'data')
+    describe  : 'Path to writable data directory'
   )
-  .options('w',
-    alias     : 'phantomjs'
-    default   : ''
-    describe  : 'Link to PhantomJS binary'
+  .options('m',
+    alias     : 'mongodb'
+    default   : '127.0.0.1:27017/local'
+    describe  : 'Connection string for MongoDB (note "mongo://" is missing)'
   )
-  .options('g',
-    alias     : 'pdfgen'
-    default   : ''
-    describe  : 'Binary that converts a HTML+CSS file into a PDF'
-  )
-  .options('x',
-    alias     : 'debug-user'
-    boolean   : true
-    describe  : 'Set this flag if you do not want to have to authenticate'
-  )
-  .options('test',
-    boolean   : true
-    describe  : 'Set server to work with the rspec integration tests'
-  )
-  .argv
 
 # If h/help is set print the generated help message and exit.
-if argv.h
+if args.argv.h
   optimist.showHelp()
   process.exit()
 
-server(argv)
+module.exports = args

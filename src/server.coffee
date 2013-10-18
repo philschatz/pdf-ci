@@ -1,7 +1,5 @@
 # Set export objects for node and coffee to a function that generates a sfw server.
-module.exports = exports = (argv) ->
-
-  SVG_TO_PNG_DPI = 12
+if true
 
   #### Dependencies ####
   # anything not in the standard library is included in the repo, or
@@ -20,18 +18,18 @@ module.exports = exports = (argv) ->
 
   fs          = require('./fs-helpers') # Async `fs.*` calls wrapped as promises
   MongoFsHelper = require('./mongo-fs-helper')
+  argv = require('./cli').argv
 
   # jsdom only seems to like REMOTE urls to scripts (like jQuery)
   # So, instead, we manually attach jQuery to the window
   jQueryFactory = require('./jquery-module')
 
 
-  CONNECTION_URL = '127.0.0.1:27017/local'
-  mongoFsHelper = new MongoFsHelper(CONNECTION_URL)
+  mongoFsHelper = new MongoFsHelper(argv.mongodb)
 
 
   # Set up the mongo connection
-  db = mongojs(CONNECTION_URL, ['tasks'])
+  db = mongojs(argv.mongodb, ['tasks'])
 
 
   # Enable easy-to-read stack traces
@@ -93,10 +91,6 @@ module.exports = exports = (argv) ->
 
   # Create the main application object, app.
   app = express.createServer()
-
-  # defaultargs.coffee exports a function that takes the argv object that is passed in and then does its
-  # best to supply sane defaults for any arguments that are missing.
-  argv = require('./defaultargs')(argv)
 
   #### Express configuration ####
   # Set up all the standard express server options
@@ -297,7 +291,7 @@ module.exports = exports = (argv) ->
 
   #### Start the server ####
 
-  app.listen(argv.p, argv.o if argv.o)
+  app.listen(argv.port, argv.o if argv.o)
   # When server is listening emit a ready event.
   app.emit "ready"
   console.log("Server listening in mode: #{app.settings.env}")
