@@ -5,6 +5,51 @@ URI           = require('URIjs')
 jQueryFactory = require('./jquery-module')
 
 
+
+# Invalid first characters (see http://www.w3.org/TR/REC-xml/#NT-NameStartChar)
+INVALID_FIRST_CHAR = ///[^
+    A-Z
+    a-z
+    _
+    \u00C0-\u00D6
+    \u00D8-\u00F6
+    \u00F8-\u02FF
+    \u0370-\u037D
+    \u037F-\u1FFF
+    \u200C-\u200D
+    \u2070-\u218F
+    \u2C00-\u2FEF
+    \u3001-\uD7FF
+    \uF900-\uFDCF
+    \uFDF0-\uFFFD
+  ]///g
+
+# Invalid subsequent characters (same as before but allow 0-9, hyphen, period, and a few others)
+INVALID_SUBSEQUENT_CHARS = ///[^
+    \-
+    \.
+    \u00B7
+    \u0300-\u036F
+    \u203F-\u2040
+    0-9
+    # INVALID_FIRST_CHAR follows below
+    A-Za-z_\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD
+  ]///g
+
+FILLER_CHAR = '_'
+
+
+sanitizeHref = (fileUri, id) ->
+
+  str = fileUri.toString()
+  str += "-#{id}" if id # Add in the id if pointing to part of a piece of content
+
+  # Sanitize the 1st char and then all characters (1st char is more restrictive)
+  str[0] = str[0].replace(INVALID_FIRST_CHAR, FILLER_CHAR)
+  str = str.replace(INVALID_SUBSEQUENT_CHARS, FILLER_CHAR)
+  return str
+
+
 module.exports = class Assembler
   readFile: (filePath) -> throw new Error('BUG: Subclass must implement this method')
 
@@ -95,6 +140,9 @@ module.exports = class Assembler
             $a = $(a)
             href = $a.attr('href')
 
+            # href may contain a `#some-id` in the URL
+            [href, elementId] = href.split('#')
+
             fileUri = new URI(href)
             fileUri = fileUri.absoluteTo(navUri)
 
@@ -112,7 +160,46 @@ module.exports = class Assembler
                   src = new URI(src)
                   src = src.absoluteTo(fileUri)
                   $img.attr('src', src.toString())
-                allHtml[fileUri.toString()] = $('body').html()
+
+                # Canonicalize all `id` attributes to contain the path to the HTML file they are in
+                $('body *[id]').each (i, el) ->
+                  $el = $(el)
+                  id = $el.attr('id')
+
+                  # Log and skip if `id` is empty
+                  if not id
+                    # console.log('Skipping empty id')
+                    return
+
+                  $el.attr('id', sanitizeHref(fileUri, id))
+
+                # Canonicalize all `href` attributes to contain the path to the HTML file they are in
+                $('a[href]:not([href^=http])').each (i, el) ->
+                  $el = $(el)
+                  [hrefPath, id] = $el.attr('href').split('#')
+
+                  # Convert the path to be absolute
+                  if hrefPath
+                    if hrefPath[0] == '/'
+                      #console.error('BUG: href starts with slash', fileUri.toString(), hrefPath)
+                      hrefPath = hrefPath.slice(1) # Remove the leading slash
+
+                    hrefUri = new URI(hrefPath)
+                    hrefUri = hrefUri.absoluteTo(fileUri)
+                  else
+                    hrefUri = fileUri
+
+                  $el.attr('href', "##{sanitizeHref(hrefUri, id)}")
+
+                # The ToC navigation file may point to a specific element
+                if elementId
+                  $el = $("##{elementId}")
+                  # Log if no element was found
+                  console.error('BUG: Could not find id', fileUri.toString(), elementId)
+                else
+                  $el = $('body')
+
+                allHtml[fileUri.toString()] = $el.html()
 
           # Concatenate all the HTML once they have all been parsed
           return Q.all(anchorPromises)
