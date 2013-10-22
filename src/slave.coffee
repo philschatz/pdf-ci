@@ -14,7 +14,10 @@ MongoFsHelper = require('./mongo-fs-helper')
 # Add the path to the PDF gen
 args = require('./cli')
 argv = args
-.options('debug',
+.options('local',
+  boolean   : true
+  describe  : 'Run locally (do not clone/pull from remote sources)'
+).options('debug',
   boolean   : true
   describe  : 'Add debug logging and styling in the PDF'
 ).options('g',
@@ -184,12 +187,20 @@ buildPdf = (repoUser, repoName, rootPath, logStream) ->
     assembler = new FileAssembler(rootPath, logStream)
     pdfGenerator = new PdfGenerator()
 
-    return cloneOrPull(repoUser, repoName, logStream)
-    .then () ->
+    assemble = () ->
       assembler.assemble()
       .then (html) ->
         return pdfGenerator.build(html, rootPath, outStream, logStream)
         .then () -> return outStream.md5
+
+    # If running locally do not clone/pull
+    if argv.local
+      logStream.write('Warning: Slave Running locally (no clone/pull)\n')
+      return assemble()
+    else
+      return cloneOrPull(repoUser, repoName, logStream)
+      .then () ->
+        return assemble()
 
 
 delayedRunLoop = () -> setTimeout(runLoop, 500)
@@ -220,7 +231,6 @@ runLoop = () ->
         now = new Date()
         query2 = _.extend {}, query, {$lt: {updated: now}}
         db.tasks.update query2, {set: {updated: now}}
-
 
       promise = buildPdf(taskInfo.repoUser, taskInfo.repoName, rootPath, logStream)
 
