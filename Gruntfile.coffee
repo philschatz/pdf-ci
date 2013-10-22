@@ -13,6 +13,8 @@ module.exports = (grunt) ->
         commit: true
         push: true
         pushTo: ''
+        # Files that are changed during the bump
+        commitFiles: ['package.json', 'bower.json']
         # Files to bump the version number of
         files: ['package.json', 'bower.json']
 
