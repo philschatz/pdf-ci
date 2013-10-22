@@ -69,12 +69,14 @@ module.exports = class Assembler
 
   readFile: (filePath) -> throw new Error('BUG: Subclass must implement this method')
 
-  # A synchronous method (like console.log) that outputs a message to logStream
+  # An asynchronous method that outputs a message to logStream.
+  # Returns a promise that resolves when the message is written.
   log: (msg) ->
     if 'string' == typeof msg
-      @logStream.write("#{msg.trim()}\n")
+      msg = "#{msg.trim()}\n"
     else
-      @logStream.write("#{JSON.stringify(msg)}\n")
+      msg = "#{JSON.stringify(msg)}\n"
+    return Q.ninvoke(@logStream, 'write', msg)
 
 
   # Given a file URI (to XML or HTML file), return a Promise of a jQuery object
@@ -187,128 +189,94 @@ module.exports = class Assembler
     # 4. Read each HTML file linked to from the ToC file (relative to the ToC file)
 
     # Check that a mimetype file exists
-    @log('Checking if mimetype file exists')
-    return @_readUri(new URI('mimetype'))
-    .then (mimeTypeStr) =>
-      # Fail if the mimetype file is invalid
-      if 'application/epub+zip' != mimeTypeStr.toString().trim()
-        return Q.defer().reject('Invalid mimetype file')
+    return @log('Checking if mimetype file exists')
+    .then () =>
+      return @_readUri(new URI('mimetype'))
+      .then (mimeTypeStr) =>
+        # Fail if the mimetype file is invalid
+        if 'application/epub+zip' != mimeTypeStr.toString().trim()
+          return Q.defer().reject('Invalid mimetype file')
 
-      # 1. Read the META-INF/container.xml file
-      containerUri = new URI('META-INF/container.xml')
-      return @_buildJQuery(containerUri)
-      .then ($) =>
-        # 2. Read the first OPF file
-        $opf = $('container > rootfiles > rootfile[media-type="application/oebps-package+xml"]').first()
-        opfPath = $opf.attr('full-path')
-        opfUri = new URI(opfPath)
-        # Find the absolute path to the ToC navigation file
-        return @_buildJQuery(opfUri)
+        # 1. Read the META-INF/container.xml file
+        containerUri = new URI('META-INF/container.xml')
+        return @_buildJQuery(containerUri)
         .then ($) =>
-          $navItem = $('package > manifest > item[properties^="nav"]')
-          navPath = $navItem.attr('href')
+          # 2. Read the first OPF file
+          $opf = $('container > rootfiles > rootfile[media-type="application/oebps-package+xml"]').first()
+          opfPath = $opf.attr('full-path')
+          opfUri = new URI(opfPath)
+          # Find the absolute path to the ToC navigation file
+          return @_buildJQuery(opfUri)
+          .then ($) =>
+            $navItem = $('package > manifest > item[properties^="nav"]')
+            navPath = $navItem.attr('href')
 
-          navUri = new URI(navPath)
-          # Make sure navUri is absolute because it is used later to load HTML files
-          navUri = navUri.absoluteTo(opfUri)
-          return @_buildFromToc(navUri)
+            navUri = new URI(navPath)
+            # Make sure navUri is absolute because it is used later to load HTML files
+            navUri = navUri.absoluteTo(opfUri)
+            return @_buildFromToc(navUri)
 
 
   # Given a ToC Navigation HTML file generate a single large HTML file
   _buildFromToc: (navUri) ->
 
     # 3. Read the ToC Navigation file (relative to the OPF file)
-    @log('Reading ToC Navigation file')
-    return @_buildJQuery(navUri)
-    .then ($) =>
-      $navBody = $('body')
-      # 4. Read each HTML file linked to from the ToC file (relative to the ToC file)
-      $toc = $('nav')
+    return @log('Reading ToC Navigation file')
+    .then () =>
+      return @_buildJQuery(navUri)
+      .then ($) =>
+        $navBody = $('body')
+        # 4. Read each HTML file linked to from the ToC file (relative to the ToC file)
+        $toc = $('nav')
 
-      # Rewrite all the ToC links to be absolute
-      _.each $toc.find('li > a[href]'), (a) ->
-        $a = $(a)
-        href = $a.attr('href')
+        # Rewrite all the ToC links to be absolute
+        _.each $toc.find('li > a[href]'), (a) ->
+          $a = $(a)
+          href = $a.attr('href')
 
-        # href may contain a `#some-id` in the URL
-        [href, elementId] = href.split('#')
+          # href may contain a `#some-id` in the URL
+          [href, elementId] = href.split('#')
 
-        fileUri = new URI(href)
-        fileUri = fileUri.absoluteTo(navUri)
+          fileUri = new URI(href)
+          fileUri = fileUri.absoluteTo(navUri)
 
-        # Rewrite the $toc links to be absolute
-        absHref = fileUri.toString()
-        absHref += "##{elementId}" if elementId
-        $a.attr('href', absHref)
-
-
-      # Build up a skeleton for the content from the ToC
-      $contentSkeleton = $('<div id="x-epub-content" class="x-epub-book"></div>')
-      $contentSkeleton.append($toc.children().clone())
-
-      # Unwrap all the <ol> elements since the children should all now be `<div class="*">`
-      $contentSkeleton.find('ol').children().unwrap()
-
-      $navBody.append($contentSkeleton)
-
-      # Convert all `li[ > span]` to Unit/Chapter/Section
-      _.each $contentSkeleton.find('li > span'), (span) ->
-        $span = $(span)
-        $li = $span.parent()
-        $heading = $('<h1 class="x-toc-heading"></h1>')
-        $span.replaceWith($heading)
-        $heading.append($span.contents())
-
-        $section = $('<div class="x-toc-section"></div>')
-        $section.addClass($li.attr('class'))
-        $section.append($li.children())
-        $li.replaceWith($section)
+          # Rewrite the $toc links to be absolute
+          absHref = fileUri.toString()
+          absHref += "##{elementId}" if elementId
+          $a.attr('href', absHref)
 
 
-      # For each HTML file referred to from the ToC, convert the HTML:
-      #
-      # - so it can be transcluded
-      #   1. change the `img/@src` to be absolute
-      #   2. prefix `*/@id` with the HTML path so the `@id` is unique (from `id="id123"` in `path/to/file.xhtml` to `path-to-file.xhtml-id123`)
-      #   3. convert all links from `../path/to/file.xhtml#id123` to be `#something-path-to-file.xhtml-id123` (local to the file)
-      # - transclude it so it shows up properly in the DOM
-      xincludePromises = _.map $contentSkeleton.find('a'), (a) =>
-        $a = $(a)
-        href = $a.attr('href')
+        # Build up a skeleton for the content from the ToC
+        $contentSkeleton = $('<div id="x-epub-content" class="x-epub-book"></div>')
+        $contentSkeleton.append($toc.children().clone())
 
-        # href may contain a `#some-id` in the URL
-        [href, elementId] = href.split('#')
+        # Unwrap all the <ol> elements since the children should all now be `<div class="*">`
+        $contentSkeleton.find('ol').children().unwrap()
 
-        # Path should already be absolute
-        fileUri = new URI(href)
+        $navBody.append($contentSkeleton)
 
-        return @_absolutizeFile(fileUri, elementId)
-        .then (html) ->
-          # TODO: do something with the overridden title and make sure the classname is correct
-          overrideTitle = $a.children() if $a.hasClass('auto-contents')
-          $li = $a.parent()
-          # `$()` MUST be the ToC jQuery since it is used to create Book elements
-          $constructedDiv = $('<div class="x-toc-xref"></div>')
-          $constructedDiv.attr('id', sanitizeHref(fileUri, elementId))
+        # Convert all `li[ > span]` to Unit/Chapter/Section
+        _.each $contentSkeleton.find('li > span'), (span) ->
+          $span = $(span)
+          $li = $span.parent()
+          $heading = $('<h1 class="x-toc-heading"></h1>')
+          $span.replaceWith($heading)
+          $heading.append($span.contents())
 
-          # Add all classes that were on the ToC <li> element onto the newly constructed <div>
-          $constructedDiv.addClass($li.attr('class'))
-          # For debugging, change this to something short
-          #$constructedDiv.append('<p class="x-debug-not-xincluding">ACTUAL_HTML_WOULD_GO_HERE</p>')
-          $constructedDiv.append(html)
+          $section = $('<div class="x-toc-section"></div>')
+          $section.addClass($li.attr('class'))
+          $section.append($li.children())
+          $li.replaceWith($section)
 
-          # This will replace the `<a>` as well as all child lists
-          # TODO: Use the overridden titles in the ToC child lists to rename elements inside `html`
-          $li.replaceWith($constructedDiv)
 
-      # Scope: the $toc navigation HTML file
-
-      # Concatenate all the HTML once they have all been parsed
-      return Q.all(xincludePromises)
-      .then () =>
-        @log({msg:'Number of HTML files assembled', count:xincludePromises.length})
-
-        $toc.find('a[href]').each (i, a) ->
+        # For each HTML file referred to from the ToC, convert the HTML:
+        #
+        # - so it can be transcluded
+        #   1. change the `img/@src` to be absolute
+        #   2. prefix `*/@id` with the HTML path so the `@id` is unique (from `id="id123"` in `path/to/file.xhtml` to `path-to-file.xhtml-id123`)
+        #   3. convert all links from `../path/to/file.xhtml#id123` to be `#something-path-to-file.xhtml-id123` (local to the file)
+        # - transclude it so it shows up properly in the DOM
+        xincludePromises = _.map $contentSkeleton.find('a'), (a) =>
           $a = $(a)
           href = $a.attr('href')
 
@@ -318,39 +286,77 @@ module.exports = class Assembler
           # Path should already be absolute
           fileUri = new URI(href)
 
-          # Update the href so it is local (ie `#path-to-file.xhtml-id123`)
-          # Needs to be done **after** the HTML files have been parsed and included
-          # because the path is needed to load the files
-          $a.attr('href', "##{sanitizeHref(fileUri, elementId)}")
+          return @_absolutizeFile(fileUri, elementId)
+          .then (html) ->
+            # TODO: do something with the overridden title and make sure the classname is correct
+            overrideTitle = $a.children() if $a.hasClass('auto-contents')
+            $li = $a.parent()
+            # `$()` MUST be the ToC jQuery since it is used to create Book elements
+            $constructedDiv = $('<div class="x-toc-xref"></div>')
+            $constructedDiv.attr('id', sanitizeHref(fileUri, elementId))
+
+            # Add all classes that were on the ToC <li> element onto the newly constructed <div>
+            $constructedDiv.addClass($li.attr('class'))
+            # For debugging, change this to something short
+            #$constructedDiv.append('<p class="x-debug-not-xincluding">ACTUAL_HTML_WOULD_GO_HERE</p>')
+            $constructedDiv.append(html)
+
+            # This will replace the `<a>` as well as all child lists
+            # TODO: Use the overridden titles in the ToC child lists to rename elements inside `html`
+            $li.replaceWith($constructedDiv)
+
+        # Scope: the $toc navigation HTML file
+
+        # Concatenate all the HTML once they have all been parsed
+        return Q.all(xincludePromises)
+        .then () =>
+          return @log({msg:'Number of HTML files assembled', count:xincludePromises.length})
+          .then () =>
+
+            $toc.find('a[href]').each (i, a) ->
+              $a = $(a)
+              href = $a.attr('href')
+
+              # href may contain a `#some-id` in the URL
+              [href, elementId] = href.split('#')
+
+              # Path should already be absolute
+              fileUri = new URI(href)
+
+              # Update the href so it is local (ie `#path-to-file.xhtml-id123`)
+              # Needs to be done **after** the HTML files have been parsed and included
+              # because the path is needed to load the files
+              $a.attr('href', "##{sanitizeHref(fileUri, elementId)}")
 
 
-        htmlFragment = $navBody.html()
-        #console.error(htmlFragment)
+            htmlFragment = $navBody.html()
+            #console.error(htmlFragment)
 
-        debugStyling = ''
-        if @DEBUG
-          debugStyling = """
-                            <style type="text/css">
-                              #x-epub-content *[class]:before {content: ' {' attr(class) '}'; color:#ccc; font-size: x-small; }
-                              #x-epub-content *[class] { border: 1px dashed #ccc; margin: 10px; }
-                            </style>
-                         """
+            debugStyling = ''
+            if @DEBUG
+              debugStyling = """
+                                <style type="text/css">
+                                  #x-epub-content *[class]:before {content: ' {' attr(class) '}'; color:#ccc; font-size: x-small; }
+                                  #x-epub-content *[class] { border: 1px dashed #ccc; margin: 10px; }
+                                </style>
+                             """
 
 
-        html = """<?xml version='1.0' encoding='utf-8'?>
-                  <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
-                  <html xmlns="http://www.w3.org/1999/xhtml">
-                    <head>
-                      <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
-                      #{debugStyling}
-                    </head>
-                    <body>
-                    #{htmlFragment}
-                    </body>
-                  </html>"""
+            html = """<?xml version='1.0' encoding='utf-8'?>
+                      <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
+                      <html xmlns="http://www.w3.org/1999/xhtml">
+                        <head>
+                          <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
+                          #{debugStyling}
+                        </head>
+                        <body>
+                        #{htmlFragment}
+                        </body>
+                      </html>"""
 
-        @log({msg:'Combined HTML files', size:html.length})
-        return html
+            return @log({msg:'Combined HTML files', size:html.length})
+            .then () =>
+              return html
 
 
 
