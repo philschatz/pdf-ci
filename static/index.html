@@ -44,6 +44,16 @@ a { color: black; }
   font-family: monospace;
 }
 
+#build-log > .line.warning {
+  font-weight: bold;
+  color: #ff0;
+}
+
+#build-log > .line.error {
+  font-weight: bold;
+  color: #f00;
+}
+
 #build-log > .line::before {
   content: counter(line-number);
   counter-increment: line-number;
@@ -203,6 +213,10 @@ var renderRepo = function(repoUser, repoName, data) {
       text = entry;
     }
     $line = $(LOG_LINE_TEMPLATE);
+    // If the text "warning" or "error" show up, make them yellow or red respectively
+    $line.toggleClass('warning', /warning/.test(text.toLowerCase()));
+    $line.toggleClass('error',     /error/.test(text.toLowerCase()));
+
     $line.text(text);
     $('#build-log').append($line);
   });
