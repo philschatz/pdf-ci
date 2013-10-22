@@ -1,13 +1,13 @@
 spawn       = require('child_process').spawn
 express     = require('express')
 path        = require('path')
-fs          = require('fs') # Just to load the HTML files
 Q           = require('q') # Promise library
 _           = require('underscore')
 url         = require('url')
 EventEmitter = require('events').EventEmitter
 mongojs = require('mongojs')
 
+fs            = require('./fs-helpers')
 EpubAssembler = require('./epub-assembler')
 MongoFsHelper = require('./mongo-fs-helper')
 
@@ -101,16 +101,14 @@ spawnPullCommits = (repoUser, repoName, logStream) ->
     return spawnHelper(logStream, 'git', [ 'pull' ], {cwd:cwd})
 
 
-fsReadFile  = () -> Q.nfapply(fs.readFile,  arguments)
-
-
 class FileAssembler extends EpubAssembler
   constructor: (@rootPath, @logStream) ->
     @DEBUG = argv.debug
 
   readFile: (filePath) ->
-    @log({msg:'Reading file', path:filePath})
-    return fsReadFile(path.join(@rootPath, decodeURIComponent(filePath)))
+    return @log({msg:'Reading file', path:filePath})
+    .then () =>
+      return fs.readFile(path.join(@rootPath, decodeURIComponent(filePath)))
 
 
 

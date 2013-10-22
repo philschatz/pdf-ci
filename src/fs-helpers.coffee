@@ -38,6 +38,7 @@ module.exports =
   exists: fs.exists
   readFileSync: fs.readFileSync
   writeFileSync: fs.writeFileSync
+  createWriteStream: fs.createWriteStream
 
   # Modified methods that are used
   readFile: () -> Q.nfapply(queuedReadFile,  arguments)
