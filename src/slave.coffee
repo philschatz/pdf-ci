@@ -105,13 +105,9 @@ class FileAssembler extends EpubAssembler
   constructor: (@rootPath, @logStream) ->
     @DEBUG = argv.debug
 
-  log: (msg) ->
-    return Q.ninvoke(@logStream, 'write', "#{JSON.stringify(msg)}\n")
-
   readFile: (filePath) ->
-    return @log({msg:'Reading file', path:filePath})
-    .then () =>
-      return fsReadFile(path.join(@rootPath, decodeURIComponent(filePath)))
+    @log({msg:'Reading file', path:filePath})
+    return fsReadFile(path.join(@rootPath, decodeURIComponent(filePath)))
 
 
 
