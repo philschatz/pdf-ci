@@ -14,7 +14,10 @@ MongoFsHelper = require('./mongo-fs-helper')
 # Add the path to the PDF gen
 args = require('./cli')
 argv = args
-.options('g',
+.options('debug',
+  boolean   : true
+  describe  : 'Add debug logging and styling in the PDF'
+).options('g',
   alias     : 'pdfgen'
   demand    : true
   describe  : 'Path to executable that converts HTML to PDF (PrinceXML)'
@@ -95,14 +98,12 @@ spawnPullCommits = (repoUser, repoName, logStream) ->
     return spawnHelper(logStream, 'git', [ 'pull' ], {cwd:cwd})
 
 
-
-
-
 fsReadFile  = () -> Q.nfapply(fs.readFile,  arguments)
 
 
 class FileAssembler extends EpubAssembler
   constructor: (@rootPath, @logStream) ->
+    @DEBUG = argv.debug
 
   log: (msg) ->
     return Q.ninvoke(@logStream, 'write', "#{JSON.stringify(msg)}\n")
