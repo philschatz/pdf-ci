@@ -192,17 +192,31 @@ REPO_LINK_TEMPLATE = '<span><i></i> <button class="btn-link"></button></span>';
 RECENT_BUILD_TEMPLATE = '<tr><td></td></tr>';
 LOG_LINE_TEMPLATE = '<div class="line"></div>';
 
+// Set to null to signify we are no longer polling updates.
 var CONTENT_TIMEOUT = null;
 
-var renderRepo = function(repoUser, repoName, data) {
-  $log = $('#build-log');
+var currentRepoUser = null;
+var currentRepoName = null;
+
+$log = $('#build-log');
+
+var beginPolling = function (repoUser, repoName) {
+  $log.empty();
+  clearTimeout(CONTENT_TIMEOUT);
+  pollingUpdate(repoUser, repoName);
+}
+
+var renderRepo = function (repoUser, repoName, data) {
+
+  currentRepoUser = repoUser;
+  currentRepoName = repoName;
+
   if (repoUser + '/' + repoName == $log.data('repo')) {
     offset = $log.children().length;
     data.history.splice(0, offset);
   } else {
     $log.empty();
   }
-  $log.data('repo', repoUser + '/' + repoName);
 
   _.each(data.history, function(entry) {
     if (entry.msg) {
@@ -246,6 +260,7 @@ var renderRepo = function(repoUser, repoName, data) {
   $resubmit.on('click', function() {
     $resubmit.addClass('disabled');
     $log.data('repo', '').empty();
+    $log.empty();
 
     $.ajax('/' + repoUser + '/' + repoName + '/submit')
     .always(function() {
@@ -272,7 +287,11 @@ var renderRepo = function(repoUser, repoName, data) {
   if (data.status != 'COMPLETED') {
     CONTENT_TIMEOUT = setTimeout(function() {
       pollingUpdate(repoUser, repoName);
-    }, 1000);
+    }, 2000);
+  } else {
+
+    // Set to null to signify we are no longer polling updates.
+    CONTENT_TIMEOUT = null;
   }
 
 };
@@ -294,6 +313,8 @@ var MyRouter = Backbone.Router.extend({
   },
 
   goRepo: function (repoUser, repoName) {
+    currentRepoUser = repoUser;
+    currentRepoName = repoName;
     pollingUpdate(repoUser, repoName);
   }
 });
@@ -341,6 +362,10 @@ pollRecent = function() {
 
     _.each(data, function(task) {
       $recentBuilds.append(buildRecentRow(task.repoUser, task.repoName, task.status));
+
+      if (currentRepoUser == task.repoUser && currentRepoName == task.repoName && !CONTENT_TIMEOUT && task.status != 'COMPLETED') {
+        beginPolling(task.repoUser, task.repoName);
+      }
     });
 
     setTimeout(function() {
