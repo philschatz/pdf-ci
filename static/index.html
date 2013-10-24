@@ -35,6 +35,10 @@ a { color: black; }
 .status.success { color: #0f0; }
 .status.danger  { color: #900; }
 
+#build-contents.disabled {
+  opacity: 0.3;
+}
+
 #build-log {
   counter-reset: line-number 0;
 
@@ -206,6 +210,8 @@ var beginPolling = function (repoUser, repoName) {
   currentRepoUser = repoUser;
   currentRepoName = repoName;
   $log.empty();
+  $('#build-contents').addClass('disabled');
+
   clearTimeout(CONTENT_TIMEOUT);
   pollingUpdate();
 }
@@ -213,6 +219,8 @@ var beginPolling = function (repoUser, repoName) {
 var renderRepo = function (data) {
   var repoUser = data.repoUser;
   var repoName = data.repoName;
+
+  $('#build-contents').removeClass('disabled');
 
   if (repoUser + '/' + repoName == $log.data('repo')) {
     offset = $log.children().length;
