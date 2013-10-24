@@ -201,21 +201,25 @@ var currentRepoName = null;
 $log = $('#build-log');
 
 var beginPolling = function (repoUser, repoName) {
-  $log.empty();
-  clearTimeout(CONTENT_TIMEOUT);
-  pollingUpdate(repoUser, repoName);
-}
-
-var renderRepo = function (repoUser, repoName, data) {
+  console.log('Setting current book to ' + repoUser + '/' + repoName);
 
   currentRepoUser = repoUser;
   currentRepoName = repoName;
+  $log.empty();
+  clearTimeout(CONTENT_TIMEOUT);
+  pollingUpdate();
+}
+
+var renderRepo = function (data) {
+  var repoUser = data.repoUser;
+  var repoName = data.repoName;
 
   if (repoUser + '/' + repoName == $log.data('repo')) {
     offset = $log.children().length;
     data.history.splice(0, offset);
   } else {
     $log.empty();
+    $log.data('repo', repoUser + '/' + repoName);
   }
 
   _.each(data.history, function(entry) {
@@ -265,7 +269,7 @@ var renderRepo = function (repoUser, repoName, data) {
     $.ajax('/' + repoUser + '/' + repoName + '/submit')
     .always(function() {
       $resubmit.removeClass('disabled');
-      pollingUpdate(repoUser, repoName);
+      pollingUpdate();
     });
   })
 
@@ -286,7 +290,7 @@ var renderRepo = function (repoUser, repoName, data) {
   // Poll if the status is not completed
   if (data.status != 'COMPLETED') {
     CONTENT_TIMEOUT = setTimeout(function() {
-      pollingUpdate(repoUser, repoName);
+      pollingUpdate();
     }, 2000);
   } else {
 
@@ -296,13 +300,13 @@ var renderRepo = function (repoUser, repoName, data) {
 
 };
 
-var pollingUpdate = function(repoUser, repoName) {
-  $.ajax('/' + repoUser + '/' + repoName + '/status')
+var pollingUpdate = function() {
+  $.ajax('/' + currentRepoUser + '/' + currentRepoName + '/status')
   .done(function (data) {
-    renderRepo(repoUser, repoName, data);
+    renderRepo(data);
   })
   .fail(function (err) {
-    renderRepo(repoUser, repoName, {status:'UNKNOWN', history:[]})
+    renderRepo({status:'UNKNOWN', history:[]});
   });
 };
 
@@ -313,9 +317,7 @@ var MyRouter = Backbone.Router.extend({
   },
 
   goRepo: function (repoUser, repoName) {
-    currentRepoUser = repoUser;
-    currentRepoName = repoName;
-    pollingUpdate(repoUser, repoName);
+    beginPolling(repoUser, repoName);
   }
 });
 
