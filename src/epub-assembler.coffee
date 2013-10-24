@@ -97,8 +97,9 @@ module.exports = class Assembler
           jQueryFactory(window)
 
           if window.jQuery
-            @log({msg: 'jQuery built for file', path: fileUri.toString()})
-            deferred.resolve(window.jQuery)
+            prom = @log({msg: 'jQuery built for file', path: fileUri.toString()})
+            prom.done () -> deferred.resolve(window.jQuery)
+            prom.fail (err) -> deferred.reject(err)
           else
             deferred.reject('Problem loading jQuery...')
       return deferred.promise
